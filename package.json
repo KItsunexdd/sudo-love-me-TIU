@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "bench": "node --enable-source-maps --import ./scripts/register-ts.mjs ./scripts/bench.ts",
+    "preflight": "node --enable-source-maps --import ./scripts/register-ts.mjs ./scripts/preflight.ts"
   },
   "dependencies": {
     "@levischuck/tiny-cbor": "0.2.11",

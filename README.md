@@ -133,6 +133,19 @@ npm run build
 
 ---
 
+## Подготовка к защите
+
+```bash
+npm run bench
+npm run build && npm start
+# В отдельном терминале при запущенном стенде
+npm run preflight
+```
+
+`bench` печатает замеры и обновляет [docs/BENCHMARKS.md](docs/BENCHMARKS.md). `preflight` проверяет запущенный демо-стенд и завершает работу с `READY` (код 0) или `NOT READY` (код 1). После сквозного прогона он сбрасывает демо-данные с сохранением Passkeys.
+
+По умолчанию проверяется `http://localhost:3000`. Для другого порта задайте `SAFESIGN_ORIGIN` при запуске сервера и `BASE_URL` при проверке, например `BASE_URL=http://localhost:3106 npm run preflight`.
+
 ## Сценарий демо за 3 минуты
 
 Полный посекундный сценарий с дословными репликами спикера, префлайт-чеклистом и планом «Б» находится в **[`docs/PITCH.md`](docs/PITCH.md)**.
