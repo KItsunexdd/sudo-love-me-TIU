@@ -1,0 +1,77 @@
+# BCC SafeSign — финальное ревью демо
+
+**По §14.1 выполнены 7 из 10 пунктов.** Для финала важнее всего три ошибки. Перевод по телефону Армана списывает деньги без зачисления. Переключатель банка в меню QR-кабинета оставляет прежнего согласующего. После сброса из SOC первый обычный перевод может попасть под ранее включённый демо-перехват. Проверка относится к однопроцессному стенду.
+
+## Находки
+
+### 1. HIGH — перевод по телефону Армана теряет зачисление
+
+**Воспроизведение.** После сброса выбрать «Сыну», заменить IBAN на телефон Армана из демо-набора, `+77000000002`, и подписать 15 000 ₸. Проба получила HTTP 200 и `EXECUTED`. В `GET /api/users` у Айгуль осталось 1 185 000 ₸, у Армана — 0 ₸. Форма и API принимают телефон, но расчёт ищет внутреннего получателя только по `accountIban`. Если поиск ничего не вернул, списание всё равно завершается. [TransferForm.tsx:149](../src/components/bank/TransferForm.tsx#L149), [inputs.ts:13](../src/lib/tx/inputs.ts#L13), [seed.ts:28](../src/lib/db/seed.ts#L28), [service.ts:88](../src/lib/tx/service.ts#L88), [service.ts:98](../src/lib/tx/service.ts#L98).
+
+**Минимальный фикс.** При расчёте разрешать подписанный номер телефона во внутренний счёт через `User.phone`, учитывая поддерживаемые формы записи номера. Контрольный результат для обоих способов перевода Арману — 1 185 000 ₸ и 15 000 ₸ соответственно.
+
+### 2. HIGH — меню QR-кабинета переключает банк и оставляет ленту прежнего согласующего
+
+**Воспроизведение.** Открыть семейную QR-ссылку с `userId=usr_arman`. Пока семейный перевод ожидает решения, выбрать «BCC Business» в меню навигации кабинета. Затем выставить корпоративный счёт на основном стенде. В URL теперь `mode=B2B&userId=usr_arman`. В пробе контекст банка вернул B2B, а кабинет передал ленте B2C и Армана. Подписка также выбирает Армана по URL, поэтому запрос директору сюда не приходит. F5 сохраняет противоречие. [Topbar.tsx:255](../src/components/shell/Topbar.tsx#L255), [DemoModeProvider.tsx:34](../src/components/shell/DemoModeProvider.tsx#L34), [CosignCabinet.tsx:21](../src/app/cosign/CosignCabinet.tsx#L21), [AppProviders.tsx:16](../src/components/shell/AppProviders.tsx#L16).
+
+**Минимальный фикс.** Использовать в меню тот же переход через `cosignHref(next)`, что и в переключателе профиля кабинета. Тогда URL, лента и SSE одновременно выберут Тимура, а семейная заявка останется у Армана. [CosignCabinet.tsx:37](../src/app/cosign/CosignCabinet.tsx#L37).
+
+### 3. HIGH — сброс из SOC оставляет включённый демо-перехват
+
+**Воспроизведение.** На главной включить подмену суммы. Через навигацию в той же вкладке перейти в SOC, сбросить демо с сохранением устройств, затем пройти через «Вторую руку» обратно на стенд. Событие сброса пришло в SOC. При смене разделов транспорт очистил историю, а главный экран, где вызывается `resetAttackState()`, был размонтирован. Проба подтвердила, что после возврата история пуста, а переключатель всё ещё в положении `MITM_AMOUNT`. Обычный перевод на 15 000 ₸ попадёт под оставшийся перехват. [DemoStand.tsx:365](../src/components/bank/DemoStand.tsx#L365), [useEventStream.ts:178](../src/lib/client/useEventStream.ts#L178), [AppProviders.tsx:20](../src/components/shell/AppProviders.tsx#L20).
+
+**Минимальный фикс.** Вызывать существующую `resetAttackState()` при каждом `DEMO_RESET` в общем `AppProviders`, который смонтирован и в SOC. Главному экрану оставить сброс состояния формы и квитанции.
+
+### 4. MEDIUM — Crypto Inspector не показывает байты подписи WebAuthn
+
+**Воспроизведение.** Подписать обычный перевод на 15 000 ₸ и открыть Inspector. У ML-DSA видны размер, hex-превью и копирование подписи. У WebAuthn виден `clientDataJSON` с challenge и origin. Сервер проверяет ECDSA, но записывает только длину `assertion.response.signature`. В пробе подлинная подпись из запроса отсутствовала и в квитанции, и в разметке Inspector. Это расхождение с буквальным требованием «видны обе реальные подписи» в §14.1. [hybrid-verifier.ts:147](../src/lib/crypto/hybrid-verifier.ts#L147), [types.ts:78](../src/lib/db/types.ts#L78), [CryptoInspectorDrawer.tsx:25](../src/components/crypto/CryptoInspectorDrawer.tsx#L25).
+
+**Минимальный фикс.** После успешной проверки сохранять подпись WebAuthn в Base64URL и вывести её длину и превью рядом с `clientDataJSON`. Для старых записей показывать, что байты не были сохранены.
+
+### 5. MEDIUM — Inspector из результата Replay показывает успешную проверку
+
+**Воспроизведение.** Исполнить перевод, нажать «Повторить пакет», затем «Открыть Crypto Inspector» на красном щите. Ответ повторной попытки — HTTP 403, отказ на шаге 2. Кнопка передаёт только `txId`. Inspector читает квитанцию первоначального перевода и показывает `EXECUTED` с семью успешными шагами. Оба серверных результата корректны, но в открытом разборе отсутствует только что показанный отказ. [DemoStand.tsx:270](../src/components/bank/DemoStand.tsx#L270), [CryptoInspectorDrawer.tsx:67](../src/components/crypto/CryptoInspectorDrawer.tsx#L67), [CryptoInspectorDrawer.tsx:80](../src/components/crypto/CryptoInspectorDrawer.tsx#L80), [hacker-panel.test.ts:106](../tests/hacker-panel.test.ts#L106), [crypto-attacks.test.ts:139](../tests/crypto-attacks.test.ts#L139).
+
+**Минимальный фикс.** При открытии из щита передавать в Inspector код и трассу текущей попытки из `attempt.error`. Исходную квитанцию подписать отдельно как исполненный перевод.
+
+### 6. MEDIUM — часы телефона могут досрочно отключить оба решения Co-Sign
+
+**Воспроизведение.** На втором телефоне часы спешат на две минуты. За минуту до серверного срока карточка уже показывает `00:00` и отключает одобрение и отказ. В пробе в этот же момент список вернул `PENDING_COSIGN`, а `cosign/prepare` выдал действительный challenge. Запрос списка при переходе в ноль выполняется однократно. Если экран отправителя закрыт и новых событий нет, ранний ответ оставляет просроченную по часам телефона карточку на экране и после реального дедлайна. [CosignRequestCard.tsx:65](../src/components/cosign/CosignRequestCard.tsx#L65), [CosignRequestCard.tsx:71](../src/components/cosign/CosignRequestCard.tsx#L71), [CosignRequestCard.tsx:75](../src/components/cosign/CosignRequestCard.tsx#L75), [service.ts:328](../src/lib/tx/service.ts#L328).
+
+**Минимальный фикс.** Возвращать время сервера со списком заявок и отсчитывать оставшийся интервал монотонным таймером. При достижении нуля перечитывать заявку. Если сервер всё ещё возвращает ожидание, пересчитать дедлайн и запланировать следующую сверку.
+
+### 7. MEDIUM — квитанция обещает резерв денег, которого нет
+
+**Воспроизведение.** При балансе Айгуль 1 200 000 ₸ отправить на Co-Sign два перевода по 850 000 ₸. Для обоих сервер отвечает 202, а квитанция пишет «Средства заморожены до подтверждения». В пробе Арман одобрил второй перевод. Для первого затем получил HTTP 409 `ERR_INSUFFICIENT_FUNDS`, остаток составил 350 000 ₸. Сервер откладывает исполнение операции и проверяет доступные деньги в момент решения. [TransactionResult.tsx:84](../src/components/bank/TransactionResult.tsx#L84), [service.ts:228](../src/lib/tx/service.ts#L228), [service.ts:243](../src/lib/tx/service.ts#L243), [crypto-attacks.test.ts:231](../tests/crypto-attacks.test.ts#L231).
+
+**Минимальный фикс.** Заменить фразу на «Перевод приостановлен до второй подписи. Доступный остаток проверим при исполнении». Это точно описывает реализованное правило расчёта.
+
+### 8. LOW — второй reset скрывает отзыв ключей от телефона на резервном опросе
+
+**Воспроизведение.** На отдельном телефоне зарегистрировать ключ и перевести ленту на резервный опрос. Между двумя опросами сбросить стенд сначала с удалением ключей, затем с сохранением. Проба подтвердила, что серверный список устройств пуст, а со старого курсора приходит только второй `DEMO_RESET { keepDevices: true }` с `resyncRequired: false`. Оболочка пропускает очистку IndexedDB. Отозванный ключ недоступен для подписи, но его локальная запись сохраняется. [bus.ts:20](../src/lib/events/bus.ts#L20), [AppProviders.tsx:23](../src/components/shell/AppProviders.tsx#L23), [CosignDevicePanel.tsx:35](../src/components/cosign/CosignDevicePanel.tsx#L35).
+
+**Минимальный фикс.** Сверять локальные устройства с сервером при любом событии сброса. Существующая функция удаляет только отсутствующие на сервере идентификаторы. [client-keystore.ts:8](../src/lib/client/client-keystore.ts#L8).
+
+## Чек-лист §14.1
+
+| № | Критерий | Итог | Основание |
+|---|---|---|---|
+| 1 | Настоящий WebAuthn и пара ML-DSA-65 | ✅ | Путь Passkey вызывает браузерный `startRegistration`, генерирует PQ-пару и передаёт аттестацию на серверную проверку. Аппаратный жест в этом прогоне не измерялся. [signer.ts:70](../src/lib/client/signer.ts#L70), [signer.ts:93](../src/lib/client/signer.ts#L93), [webauthn.ts:52](../src/lib/crypto/webauthn.ts#L52) |
+| 2 | 15 000 ₸ доверенному контакту, <1 с, баланс, обе подписи и время | ❌ | По IBAN обновляются оба остатка. В последней пробе подготовка, Software Key и исполнение в одном процессе заняли 7,9 мс. Время проверки отображается, байты ECDSA отсутствуют — находка 4. [crypto-attacks.test.ts:106](../tests/crypto-attacks.test.ts#L106), [CryptoInspectorDrawer.tsx:25](../src/components/crypto/CryptoInspectorDrawer.tsx#L25) |
+| 3 | MITM суммы 15 000 → 500 000 ₸ | ✅ | Тест проверяет HTTP 403, `ERR_WYSIWYS_TAMPERED`, суммы в diff и отказы шагов 3, 5, 6. Щит выводит diff из ответа. [hacker-panel.test.ts:77](../tests/hacker-panel.test.ts#L77), [AttackBlockedShield.tsx:80](../src/components/hacker/AttackBlockedShield.tsx#L80) |
+| 4 | MITM счёта получателя | ✅ | Сервер возвращает HTTP 403, `ERR_WYSIWYS_TAMPERED` и подменённый IBAN. [hacker-panel.test.ts:93](../tests/hacker-panel.test.ts#L93) |
+| 5 | Повтор валидного пакета | ✅ | HTTP 403 и `ERR_REPLAY_DETECTED`, повторного списания нет. Замечание к открытию Inspector — находка 5. [hacker-panel.test.ts:106](../tests/hacker-panel.test.ts#L106) |
+| 6 | Чужой origin на локальном фишинговом клоне | ✅ | Клон запрашивает настоящий браузерный credential для RP банка. Для подписанного пакета с чужим origin тест подтвердил HTTP 403 и `ERR_ORIGIN_MISMATCH`. [OriginCheck.tsx:31](../src/app/phishing-clone/OriginCheck.tsx#L31), [hacker-panel.test.ts:120](../tests/hacker-panel.test.ts#L120) |
+| 7 | 850 000 ₸, звонок, доставка и решение «Второй руки» | ✅ | В штатном профиле проверены HTTP 202, доставка `COSIGN_REQUESTED` в поток Армана, отдельные исходы с отказом и второй подписью. Пресет даёт 100/100 по весам §5.1, в примере §8 указано 95. [api.test.ts:121](../tests/api.test.ts#L121), [api.test.ts:289](../tests/api.test.ts#L289), [useCosignFeed.ts:78](../src/components/cosign/useCosignFeed.ts#L78) |
+| 8 | B2C ↔ B2B меняет роли и скоринг | ❌ | На главной выбор участников и порог для директора работают. Тот же выбор банка из меню QR-кабинета сохраняет старую роль и подписку — находка 2. [participants.ts:3](../src/lib/demo/participants.ts#L3), [engine.ts:29](../src/lib/risk/engine.ts#L29), [Topbar.tsx:255](../src/components/shell/Topbar.tsx#L255) |
+| 9 | Годовая экономия на SMS | ✅ | Базовые значения дают 2 268 000 000 ₸ в год. Изменение входных данных вызывает пересчёт, отдельные тесты сверяют пресеты. [calc.ts:147](../src/lib/roi/calc.ts#L147), [SmsRoiCalculator.tsx:38](../src/components/roi/SmsRoiCalculator.tsx#L38), [roi.test.ts:13](../tests/roi.test.ts#L13) |
+| 10 | Зелёный Vitest и чистый reset за один клик | ❌ | Штатный набор зелёный. На главной первый клик открывает диалог, второй выполняет сброс. Сервер возвращает исходные балансы, но остаются клиентские состояния из находок 3 и 8. [Topbar.tsx:389](../src/components/shell/Topbar.tsx#L389), [Topbar.tsx:88](../src/components/shell/Topbar.tsx#L88), [store.ts:78](../src/lib/db/store.ts#L78) |
+
+## Границы и фактический прогон
+
+- **Пять минут в открытой модалке.** При согласованных часах кнопка подписи сменяется на «Подготовить новый вызов». Если срок вышел во время системного диалога Passkey, сервер проверяет TTL при входе и перед исполнением. На точной границе тест получает `EXPIRED / ERR_TX_EXPIRED`. [BiometricSignModal.tsx:181](../src/components/bank/BiometricSignModal.tsx#L181), [hybrid-verifier.ts:141](../src/lib/crypto/hybrid-verifier.ts#L141), [crypto-attacks.test.ts:195](../tests/crypto-attacks.test.ts#L195).
+- **Пятнадцать минут Co-Sign.** Срок начинается с первой подписи. Пришедшие в дедлайн одобрение и отказ получают `EXPIRED`. После F5 кабинет заново запрашивает ожидания и историю по выбранному участнику. При чтении списка сервер переводит просроченные записи в конечное состояние. Это отличает перезагрузку от случая с открытой карточкой в находке 6. [service.ts:238](../src/lib/tx/service.ts#L238), [crypto-attacks.test.ts:266](../tests/crypto-attacks.test.ts#L266), [useCosignFeed.ts:78](../src/components/cosign/useCosignFeed.ts#L78), [service.ts:328](../src/lib/tx/service.ts#L328).
+- **Параллельные действия.** Повторный клик по подтверждению reset отсекает синхронный флаг. Находка 8 требует двух завершённых сбросов. На основном стенде смена отправителя перемонтирует форму, а при возврате заново запрашивается его актуальная `PENDING_COSIGN`. [Topbar.tsx:54](../src/components/shell/Topbar.tsx#L54), [DemoStand.tsx:167](../src/components/bank/DemoStand.tsx#L167), [DemoStand.tsx:388](../src/components/bank/DemoStand.tsx#L388).
+- **Проверки.** `npm run lint` и `npm run build` завершились успешно. `npx vitest run` — 11 файлов, 137 обычных успешных тестов и 2 ожидаемых падения (`it.fails`). Семь отдельных проб Vitest проверили наблюдаемое поведение для находок 1–4 и 6–8. Использовались изолированное хранилище в памяти, обработчики API, управляемые часы и рендер компонентов. Временный `tests/_probe.test.ts` удалён. [audit.test.ts:358](../tests/audit.test.ts#L358), [redteam.test.ts:199](../tests/redteam.test.ts#L199).
+
+Браузерный прогон production-сборки и замер времени до появления карточки на физическом телефоне остались непроверенными. Среда вернула `listen EPERM` при запуске `next start` на loopback. Измерение в процессе не включает сеть, отрисовку и аппаратную биометрию.
