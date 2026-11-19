@@ -76,6 +76,7 @@ export interface SignatureBundle {
   webAuthnPublicKey?: string;
   pqPublicKey?: string;
   webAuthnClientDataJson: string;
+  webAuthnSignatureBase64Url?: string;
   webAuthnSignatureBytesLength: number;
   pqAlgorithm: "ML-DSA-65";
   pqSignatureHexPreview: string;

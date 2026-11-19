@@ -25,6 +25,26 @@ export function remainingSeconds(expiresAt: string | undefined, now: number) {
   return Number.isFinite(expiry) ? Math.max(0, Math.ceil((expiry - now) / 1_000)) : 0;
 }
 
+export interface ServerClockSample {
+  serverTimeMs: number;
+  receivedAt: number;
+}
+
+export function watchCosignDeadline(expiresAt: string | undefined, clock: ServerClockSample,
+  onTick: (seconds: number) => void, onExpire: () => void) {
+  const deadline = Date.parse(expiresAt ?? "");
+  let timer: ReturnType<typeof setTimeout>;
+  function tick() {
+    const now = clock.serverTimeMs + (performance.now() - clock.receivedAt);
+    const seconds = remainingSeconds(expiresAt, now);
+    onTick(seconds);
+    if (seconds === 0) onExpire();
+    else timer = setTimeout(tick, Math.min(1_000, Math.ceil(deadline - now)));
+  }
+  tick();
+  return () => clearTimeout(timer);
+}
+
 export function formatCosignTimer(seconds: number) {
   const remaining = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
   const minutes = String(Math.floor(remaining / 60)).padStart(2, "0");

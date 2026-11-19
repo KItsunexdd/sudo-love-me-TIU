@@ -1,7 +1,41 @@
-import { describe, expect, it } from "vitest";
-import { cosignHref, cosignMode, formatCosignTimer, remainingSeconds, selectCosigner } from "@/components/cosign/cosignDetails";
+import { describe, expect, it, vi } from "vitest";
+import { cosignHref, cosignMode, formatCosignTimer, remainingSeconds, selectCosigner, watchCosignDeadline } from "@/components/cosign/cosignDetails";
 
 describe("Co-Sign timer", () => {
+  it("№6 — сверяет срок с сервером при сдвиге часов и возобновляет отсчёт после ответа PENDING", () => {
+    vi.useFakeTimers();
+    try {
+      const deadline = "2026-11-19T14:15:00.000Z";
+      const end = Date.parse(deadline);
+      vi.setSystemTime(end + 120_000);
+      const tick = vi.fn(), refresh = vi.fn();
+      const start = (remainingMs: number) => watchCosignDeadline(deadline, {
+        serverTimeMs: end - remainingMs, receivedAt: performance.now(),
+      }, tick, refresh);
+      const stop = start(1_500);
+      expect(tick).toHaveBeenLastCalledWith(2);
+      vi.advanceTimersByTime(1_000);
+      vi.setSystemTime(end - 120_000);
+      expect(tick).toHaveBeenLastCalledWith(1);
+      vi.advanceTimersByTime(499);
+      expect(refresh).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(tick).toHaveBeenLastCalledWith(0);
+      expect(refresh).toHaveBeenCalledTimes(1);
+      stop();
+
+      const stopPending = start(250);
+      expect(tick).toHaveBeenLastCalledWith(1);
+      vi.advanceTimersByTime(250);
+      expect(refresh).toHaveBeenCalledTimes(2);
+      stopPending();
+      const unmount = start(500);
+      unmount();
+      vi.advanceTimersByTime(1_000);
+      expect(refresh).toHaveBeenCalledTimes(2);
+    } finally { vi.useRealTimers(); }
+  });
+
   it("formats the full 15-minute window and pads seconds", () => {
     expect(formatCosignTimer(900)).toBe("15:00");
     expect(formatCosignTimer(65)).toBe("01:05");

@@ -4,11 +4,26 @@ import { useEffect } from "react";
 import { Atom, Copy, Fingerprint, Link2 } from "lucide-react";
 import { Badge, Button, Card, Drawer, ErrorCard, HashChip, JsonDiffViewer, Skeleton, useToast } from "@/components/ui";
 import { useDemoState } from "@/lib/client/useDemoState";
+import type { ApiError } from "@/lib/client/api";
 import type { SignatureBundle } from "@/lib/db/types";
-import { bytesToHex, fromBase64, sha256 } from "@/lib/crypto/canonical";
+import { bytesToHex, fromBase64, fromBase64Url, sha256 } from "@/lib/crypto/canonical";
 import { VerificationStepsList } from "./VerificationStepsList";
 import { LatencyBadge } from "./LatencyBadge";
 import { useTransaction } from "./useTransaction";
+
+function WebAuthnBytes({ signature }: { signature: SignatureBundle }) {
+  const encoded = signature.webAuthnSignatureBase64Url;
+  if (!encoded) return <p className="text-sm text-ink-muted">байты не сохранены</p>;
+  try {
+    const bytes = fromBase64Url(encoded);
+    return <div className="mono-data space-y-1 break-all text-xs text-ink-secondary">
+      <p>Hex · {bytesToHex(bytes.subarray(0, 32))}{bytes.length > 32 && "…"}</p>
+      <p>Base64URL · {encoded}</p>
+    </div>;
+  } catch {
+    return <p className="text-sm text-danger-text">Не удалось прочитать байты подписи.</p>;
+  }
+}
 
 function SignatureEvidence({ signature, title }: { signature: SignatureBundle; title: string }) {
   const { toast } = useToast();
@@ -24,6 +39,9 @@ function SignatureEvidence({ signature, title }: { signature: SignatureBundle; t
     <h3 className="type-h2">{title}</h3>
     <h4 className="flex items-center gap-2 text-sm font-semibold"><Fingerprint aria-hidden="true" size={18} className="text-bcc" /> WebAuthn · clientDataJSON</h4>
     <JsonDiffViewer json={signature.webAuthnClientDataJson} />
+    <h4 className="type-h3">Подпись WebAuthn · ECDSA P-256</h4>
+    <p className="mono-data tabular-nums">{signature.webAuthnSignatureBytesLength} байт</p>
+    <WebAuthnBytes signature={signature} />
     <h4 className="flex items-center gap-2 text-sm font-semibold"><Atom aria-hidden="true" size={18} className="text-quantum" /> ML-DSA-65 · FIPS 204</h4>
     <p className="mono-data tabular-nums">{signature.pqSignatureBytesLength.toLocaleString("ru-RU")} байт</p>
     <p className="break-all rounded-lg border border-border-default bg-terminal p-2.5 font-mono text-xs text-ink-secondary">{signature.pqSignatureHexPreview}…</p>
@@ -61,20 +79,27 @@ function signatureDigest(value: string) {
   try { return bytesToHex(sha256(fromBase64(value))); } catch { return null; }
 }
 
-export function CryptoInspectorDrawer({ txId, userId, open = true, onClose, onQuantum }: {
+export function CryptoInspectorDrawer({ txId, userId, open = true, onClose, onQuantum, attemptError }: {
   txId: string | null; userId: string; open?: boolean; onClose: () => void; onQuantum?: () => void;
+  attemptError?: ApiError;
 }) {
   const { record: tx, error, retry } = useTransaction(open ? txId : null, userId);
   const { users } = useDemoState(userId);
-  const missing = error?.failureCode === "ERR_TX_NOT_FOUND";
+  const missing = !attemptError && error?.failureCode === "ERR_TX_NOT_FOUND";
   useEffect(() => { if (missing) onClose(); }, [missing, onClose]);
   if (missing) return null;
   const owner = (id: string) => users.find(user => user.id === id)?.fullName ?? id;
   const link = tx?.requiresCoSign && tx.primarySignature ? signatureDigest(tx.primarySignature.pqSignatureBase64) : null;
   return <Drawer open={open && Boolean(txId)} onClose={onClose} title="Crypto Inspector" description={<span className="break-all font-mono">{txId}</span>}
     footer={onQuantum && <Button size="sm" variant="secondary" icon={<Atom size={16} />} onClick={onQuantum}>Симулировать квантовый взлом ECDSA</Button>}>
+    {attemptError && <section className="mb-5 space-y-3">
+      <h3 className="type-h2">Отклонённая попытка</h3>
+      <ErrorCard error={attemptError} />
+      <VerificationStepsList trace={attemptError.verificationTrace} failureCode={attemptError.failureCode} />
+    </section>}
     {error ? <ErrorCard error={error} action={<Button size="sm" onClick={retry}>Обновить</Button>} /> : !tx ? <DrawerLoadingSkeleton /> :
-      <div className="space-y-4">
+      <section className="space-y-4">
+        {attemptError && <h3 className="type-h2">{tx.status === "EXECUTED" ? "Исходная операция (исполнена)" : "Исходная операция"}</h3>}
         <div className="flex flex-wrap gap-2"><Badge status={tx.status} /><Badge status={tx.riskLevel} /></div>
         <h3 className="type-h2">Серверная проверка</h3>
         <VerificationStepsList trace={tx.verificationTrace} failureCode={tx.failureCode} />
@@ -98,7 +123,7 @@ export function CryptoInspectorDrawer({ txId, userId, open = true, onClose, onQu
           {link && <HashChip value={link} label="SHA-256 первой PQ-подписи" />}
           <p className="text-sm text-ink-secondary">Вторая подпись связывает хэш реквизитов с хэшем первой подписи.</p></Card>}
         {tx.cosignSignature && <SignatureEvidence title={owner(tx.cosignSignature.signerUserId)} signature={tx.cosignSignature} />}
-      </div>}
+      </section>}
   </Drawer>;
 }
 

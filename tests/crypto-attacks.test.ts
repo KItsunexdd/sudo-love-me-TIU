@@ -1,4 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { CryptoInspectorDrawer } from "@/components/crypto/CryptoInspectorDrawer";
+import { useTransaction } from "@/components/crypto/useTransaction";
+import { TransactionResult } from "@/components/bank/TransactionResult";
+import * as shield from "@/components/hacker/AttackBlockedShield";
+import { ToastProvider } from "@/components/ui/Toast";
+import type { ApiError } from "@/lib/client/api";
+import type { TransactionRecord } from "@/lib/db/types";
 import { hexToBytes } from "@noble/hashes/utils.js";
 import { MemoryAdapter } from "@/lib/db/store";
 import { recipientPresets } from "@/lib/db/seed";
@@ -19,6 +28,16 @@ const service = new TransactionService(storage, () => new Date(time));
 const low = { senderId: "usr_aigul", mode: "B2C", operationType: "P2P_TRANSFER", purpose: "На продукты", ...recipientPresets.son };
 const high = { ...low, ...recipientPresets.unknown, simulatedContext: { activeUnknownCall: true } };
 const b2b = { ...low, ...recipientPresets.supplier, senderId: "usr_dinara", mode: "B2B", operationType: "B2B_INVOICE" };
+
+vi.mock("@/components/crypto/useTransaction", () => ({ useTransaction: vi.fn() }));
+
+function inspectReceipt(record: TransactionRecord, attemptError?: ApiError) {
+  vi.mocked(useTransaction).mockReturnValue({ record, error: undefined, retry: vi.fn() });
+  const drawer = createElement(CryptoInspectorDrawer, {
+    userId: record.payload.senderId, txId: record.id, onClose: vi.fn(), attemptError,
+  });
+  return renderToStaticMarkup(createElement(ToastProvider, null, drawer));
+}
 
 function success<T extends { ok: true }>(result: T | Failure): T {
   if (!result.ok) throw new Error(result.failureCode + " " + JSON.stringify(result.verificationTrace));
@@ -103,6 +122,34 @@ describe("Канонический пакет и ML-DSA-65", () => {
 });
 
 describe("Гибридная проверка и атомарное исполнение", () => {
+  it.each(["+77000000002", "77000000002", "87000000002"])("№1 — зачисляет Арману по подписанному номеру %s", async recipientAccount => {
+    const { packet } = await preparePrimary({ ...low, recipientAccount });
+    const result = success(await service.execute(packet));
+    expect(result.status).toBe("EXECUTED");
+    expect(result.transaction.payload.recipientAccount).toBe(recipientAccount);
+    expect((await storage.snapshot()).users.slice(0, 2).map(user => user.balanceTenge)).toEqual([1_185_000, 15_000]);
+  });
+
+  it("№4 — Inspector показывает сохранённую подпись WebAuthn и читает прежнюю квитанцию", async () => {
+    const { packet } = await preparePrimary();
+    success(await service.execute(packet));
+    const { transaction } = success(await service.getTransaction(packet.txId));
+    const encoded = packet.webAuthnAssertion.response.signature;
+    const bytes = fromBase64Url(encoded);
+    const signature = transaction.primarySignature!;
+    expect(signature.webAuthnSignatureBase64Url).toBe(encoded);
+    const panel = inspectReceipt(transaction);
+    expect(panel).toContain(encoded);
+    expect(panel).toContain(bytesToHex(bytes.subarray(0, 32)));
+    expect(panel).toContain(bytes.length + " байт");
+    expect(panel).toContain("clientDataJSON");
+
+    delete signature.webAuthnSignatureBase64Url;
+    const legacyPanel = inspectReceipt(transaction);
+    expect(legacyPanel).toContain("байты не сохранены");
+    expect(legacyPanel).toContain("ML-DSA-65");
+  });
+
   it("исполняет LOW со всеми семью PASS, обновляет оба остатка и счётчик", async () => {
     const { actor, tx, packet } = await preparePrimary();
     expect(tx.risk.level).toBe("LOW");
@@ -129,11 +176,30 @@ describe("Гибридная проверка и атомарное исполн
     expect(db.users[0].balanceTenge).toBe(1_200_000);
     expect(db.securityEvents.at(-1)?.eventType).toBe("ATTACK_MITM_BLOCKED");
   });
-  it("повторные и одновременные пакеты дают одно списание и сохраняют квитанцию", async () => {
+  it("№5 — при повторе щит передаёт отказ в Inspector, исходная квитанция и списание сохраняются", async () => {
     const { packet } = await preparePrimary();
     const results = await Promise.all([service.execute(packet), service.execute(packet), service.execute(packet)]);
     expect(results.filter(r => r.status === "EXECUTED")).toHaveLength(1);
     expect(results.filter(r => !r.ok && r.failureCode === "ERR_REPLAY_DETECTED")).toHaveLength(2);
+    const refused = results.find(r => !r.ok)!;
+    const receipt = success(await service.getTransaction(packet.txId)).transaction;
+    const open = vi.fn<(error?: ApiError) => void>();
+    const blockedShield = vi.spyOn(shield, "AttackBlockedShield").mockImplementation(({ onInspect }) => {
+      onInspect?.();
+      return null;
+    });
+    try {
+      renderToStaticMarkup(createElement(TransactionResult, {
+        record: receipt, http: 403, error: refused, onInspect: open, onCosign: vi.fn(), onNew: vi.fn(),
+      }));
+    } finally { blockedShield.mockRestore(); }
+    expect(open).toHaveBeenCalledWith(refused);
+    const [attemptPanel, receiptPanel] = inspectReceipt(receipt, open.mock.calls[0][0]).split("Исходная операция (исполнена)");
+    expect(attemptPanel).toContain("ERR_REPLAY_DETECTED");
+    expect(attemptPanel).toContain("Отказ");
+    expect(attemptPanel).toContain(refused.verificationTrace[1].details);
+    expect(receiptPanel.match(/Пройдено/g)).toHaveLength(7);
+    expect(inspectReceipt(receipt)).not.toContain("ERR_REPLAY_DETECTED");
     expect(await service.execute(packet)).toMatchObject({ failureCode: "ERR_REPLAY_DETECTED" });
     const db = await storage.snapshot();
     expect(db.transactions[0].status).toBe("EXECUTED");
@@ -224,13 +290,20 @@ describe("Вторая рука", () => {
     const result = success(await service.cosignSubmit(packet));
     expect(result.transaction.primarySignature?.pqSignatureBase64).toBe(primary.pqSignatureBase64);
     expect(result.transaction.cosignSignature?.pqSignatureBase64).toBe(packet.pqSignatureBase64);
+    expect(result.transaction.cosignSignature?.webAuthnSignatureBase64Url).toBe(packet.webAuthnAssertion.response.signature);
+    expect(inspectReceipt(result.transaction)).toContain(packet.webAuthnAssertion.response.signature);
     expect(result.transaction.cosignSignature?.signerUserId).toBe("usr_arman");
     expect(await service.cosignSubmit(packet)).toMatchObject({ failureCode: "ERR_REPLAY_DETECTED" });
     expect((await storage.snapshot()).users[0].balanceTenge).toBe(350_000);
   });
-  it("повторно проверяет остаток при списании после одобрения другой операции", async () => {
-    const { tx } = await pendingHigh();
+  it("№7 — квитанция объясняет проверку остатка при исполнении, два ожидания не резервируют деньги", async () => {
+    const { tx, pending } = await pendingHigh();
     const other = await pendingHigh();
+    const receipt = renderToStaticMarkup(createElement(TransactionResult, {
+      record: pending.transaction, onInspect: vi.fn(), onCosign: vi.fn(), onNew: vi.fn(),
+    }));
+    expect(receipt).toContain("Перевод приостановлен до второй подписи. Доступный остаток проверим при исполнении.");
+    expect((await storage.snapshot()).users[0].balanceTenge).toBe(1_200_000);
     const approval = await secondSignature(other.tx.txId);
     expect(await service.cosignSubmit(approval.packet)).toMatchObject({ status: "EXECUTED" });
     const { packet } = await secondSignature(tx.txId);
@@ -269,6 +342,18 @@ describe("Вторая рука", () => {
     time += COSIGN_TTL;
     expect(await service.cosignSubmit(packet)).toMatchObject({ status: "EXPIRED", failureCode: "ERR_TX_EXPIRED" });
     expect(await service.cosignReject({ txId: tx.txId, cosignerUserId: "usr_arman" })).toMatchObject({ status: "EXPIRED" });
+  });
+  it("№6 — время списка совпадает с серверной проверкой срока запрошенной подписи", async () => {
+    const { tx } = await pendingHigh();
+    time += COSIGN_TTL - 1;
+    const query = { userId: "usr_arman" };
+    expect(success(await service.listTransactions(query))).toMatchObject({
+      serverTimeMs: time, transactions: [{ id: tx.txId, status: "PENDING_COSIGN" }],
+    });
+    time += 1;
+    expect(success(await service.listTransactions(query))).toMatchObject({
+      serverTimeMs: time, transactions: [{ id: tx.txId, status: "EXPIRED" }],
+    });
   });
   it("направляет счёт на 1 250 000 ₸ директору и списывает с корпоративного счёта", async () => {
     const { tx, packet } = await preparePrimary(b2b);

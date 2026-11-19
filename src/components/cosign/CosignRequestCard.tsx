@@ -7,7 +7,7 @@ import { Button, Card, HashChip } from "@/components/ui";
 import type { DeviceKind, TransactionRecord } from "@/lib/db/types";
 import { formatIban, formatTenge } from "@/lib/ui/format";
 import { cosignAlertVariants, reducedMotionVariants } from "@/lib/ui/motion";
-import { corporateRule, formatCosignTimer, remainingSeconds, signatureHash } from "./cosignDetails";
+import { corporateRule, formatCosignTimer, signatureHash, watchCosignDeadline, type ServerClockSample } from "./cosignDetails";
 
 export function CosignSignatureChain({ transaction }: { transaction: TransactionRecord }) {
   const first = signatureHash(transaction.primarySignature);
@@ -32,6 +32,7 @@ export function CosignSignatureChain({ transaction }: { transaction: Transaction
 
 interface RequestProps {
   transaction: TransactionRecord;
+  clock: ServerClockSample;
   senderName: string;
   deviceKind?: DeviceKind;
   compact?: boolean;
@@ -45,6 +46,7 @@ interface RequestProps {
 
 export function CosignRequestCard({
   transaction,
+  clock,
   senderName,
   deviceKind,
   compact = false,
@@ -56,19 +58,11 @@ export function CosignRequestCard({
   devicePrompt,
 }: RequestProps) {
   const reduce = useReducedMotion();
-  const [now, setNow] = useState<number>();
+  const [seconds, setSeconds] = useState<number>();
   const expiry = transaction.cosignExpiresAt;
-  const seconds = now === undefined ? undefined : remainingSeconds(expiry, now);
   const expired = seconds === 0;
 
-  useEffect(() => {
-    const tick = () => setNow(Date.now());
-    tick();
-    const timer = setInterval(tick, 1_000);
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => { if (expired) onExpire(); }, [expired, onExpire]);
+  useEffect(() => watchCosignDeadline(expiry, clock, setSeconds, onExpire), [expiry, clock, onExpire]);
 
   const { amountTenge, mode, purpose, recipientAccount, recipientName } = transaction.payload;
   const corporate = mode === "B2B";

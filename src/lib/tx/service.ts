@@ -85,7 +85,8 @@ function fundingSource(sender: User, { operationType, amountTenge }: Pick<Canoni
 
 function prepareSettlement(unit: UnitOfWork, tx: TransactionRecord, sender: User) {
   const { amountTenge, recipientAccount, operationType } = tx.payload;
-  const recipient = unit.db.users.find(u => u.accountIban === recipientAccount);
+  const phone = /^[78]\d{10}$/.test(recipientAccount) ? "+7" + recipientAccount.slice(1) : recipientAccount;
+  const recipient = unit.db.users.find(u => u.accountIban === recipientAccount || u.phone === phone);
   const source = fundingSource(sender, tx.payload);
   const loan = operationType === "ONLINE_LOAN";
   const proceeds = recipient === sender && source === "balanceTenge" && !loan ? 0 : amountTenge;
@@ -330,7 +331,7 @@ export class TransactionService {
       const transactions = unit.db.transactions.filter(tx =>
         (!filter.status || tx.status === filter.status) &&
         (!filter.userId || tx.payload.senderId === filter.userId || tx.cosignerUserId === filter.userId));
-      return { ok: true as const, transactions };
+      return { ok: true as const, transactions, serverTimeMs: now.getTime() };
     });
   }
 }

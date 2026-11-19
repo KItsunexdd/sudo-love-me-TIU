@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type ApiError } from "@/lib/client/api";
 import { useEventStream } from "@/lib/client/useEventStream";
 import type { Mode, TransactionRecord } from "@/lib/db/types";
+import type { ServerClockSample } from "./cosignDetails";
 
 function useRequestPing() {
   const audio = useRef<AudioContext | null>(null);
@@ -62,7 +63,9 @@ export function useCosignFeed(cosignerUserId: string, mode: Mode) {
   const { events, status, syncVersion, resyncVersion } = useEventStream({ channel: "cosign", userId: cosignerUserId });
   const resetId = events.findLast(event => event.type === "DEMO_RESET")?.id;
   const seenEventId = useRef(events.at(-1)?.id ?? 0);
-  const [data, setData] = useState<{ pending: TransactionRecord[]; history: TransactionRecord[]; resetId?: number }>();
+  const [data, setData] = useState<{
+    pending: TransactionRecord[]; history: TransactionRecord[]; clock: ServerClockSample; resetId?: number;
+  }>();
   const [error, setError] = useState<ApiError | null>(null);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const refresh = useCallback(() => setRefreshVersion(value => value + 1), []);
@@ -74,24 +77,22 @@ export function useCosignFeed(cosignerUserId: string, mode: Mode) {
     const belongsToFeed = (tx: TransactionRecord) => tx.cosignerUserId === cosignerUserId && tx.payload.mode === mode;
     const newestFirst = (a: TransactionRecord, b: TransactionRecord) => b.updatedAt.localeCompare(a.updatedAt);
 
-    void Promise.all([
-      api.listTransactions({ ...query, status: "PENDING_COSIGN" }, controller.signal),
-      api.listTransactions(query, controller.signal),
-    ]).then(([pendingResult, historyResult]) => {
+    void api.listTransactions(query, controller.signal).then(result => {
       if (controller.signal.aborted) return;
-      setError(pendingResult.error ?? historyResult.error);
-      if (!pendingResult.ok || !historyResult.ok) return;
+      setError(result.error);
+      if (!result.ok) return;
 
-      const history = historyResult.data.transactions.filter(tx => belongsToFeed(tx) && tx.primarySignature &&
+      const clock = { serverTimeMs: result.data.serverTimeMs, receivedAt: performance.now() };
+      const transactions = result.data.transactions.filter(belongsToFeed);
+      const history = transactions.filter(tx => tx.primarySignature &&
         tx.status !== "PENDING_COSIGN" && tx.status !== "CHALLENGE_ISSUED").sort(newestFirst);
-      const decided = new Set(history.map(tx => tx.id));
-      const pending = pendingResult.data.transactions.filter(tx => belongsToFeed(tx) && !decided.has(tx.id)).sort(newestFirst);
+      const pending = transactions.filter(tx => tx.status === "PENDING_COSIGN").sort(newestFirst);
       const pendingIds = new Set(pending.map(tx => tx.id));
       if (events.some(event => event.id > seenEventId.current && event.type === "COSIGN_REQUESTED" &&
         event.cosignerUserId === cosignerUserId && pendingIds.has(event.txId))) ping();
 
       seenEventId.current = events.at(-1)?.id ?? seenEventId.current;
-      setData({ pending, history, resetId });
+      setData({ pending, history, clock, resetId });
     });
     return () => controller.abort();
   }, [cosignerUserId, mode, events, resetId, syncVersion, resyncVersion, refreshVersion, ping]);
@@ -100,6 +101,7 @@ export function useCosignFeed(cosignerUserId: string, mode: Mode) {
   return {
     pending: current?.pending ?? [],
     history: current?.history ?? [],
+    clock: current?.clock,
     loading: !current && !error,
     error, status, resetId, syncVersion, resyncVersion, refresh,
   };

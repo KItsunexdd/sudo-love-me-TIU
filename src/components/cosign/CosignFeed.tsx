@@ -181,6 +181,7 @@ export function CosignFeed({ userId, mode, compact = false, hideConnectionBadge 
   }
 
   const pending = feed.pending.filter(tx => tx.id !== decision?.transaction.id);
+  const clock = feed.clock;
   const localRecord = feed.history.find(tx => tx.id === decision?.transaction.id);
   const latest = feed.history[0];
   const outcome = decision && !localRecord
@@ -264,13 +265,14 @@ export function CosignFeed({ userId, mode, compact = false, hideConnectionBadge 
       ) : (
         <>
           {showOutcome && <DecisionResult key={outcome.transaction.id} decision={outcome} coolingOffActive={coolingOffActive} />}
-          {pending.length > 0 ? (
+          {pending.length > 0 && clock ? (
             <section className="space-y-2.5" aria-label="Входящие запросы">
               <AnimatePresence initial={false}>
                 {pending.map((tx, index) => (
                   <CosignRequestCard
                     key={tx.id}
                     transaction={tx}
+                    clock={clock}
                     senderName={senderName(tx)}
                     deviceKind={device?.deviceKind}
                     compact={compact}

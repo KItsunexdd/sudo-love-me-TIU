@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Fingerprint, Menu, RotateCcw, ShieldCheck, Zap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api, type ApiError } from "@/lib/client/api";
@@ -17,6 +17,7 @@ import { Modal } from "@/components/ui/Modal";
 import { SegmentedControl, type Segment } from "@/components/ui/SegmentedControl";
 import { useToast } from "@/components/ui/Toast";
 import { useDemoMode } from "./DemoModeProvider";
+import { cosignHref } from "@/components/cosign/cosignDetails";
 
 const modeOptions: readonly Segment<Mode>[] = [
   { value: "B2C", label: "bcc.kz (Семья)" },
@@ -179,6 +180,7 @@ function usePendingCount(cosignerId: string, lastEventId: number | undefined, sy
 }
 
 function CosignTopbar({ pathname }: { pathname: string }) {
+  const router = useRouter();
   const { mode, setMode, cosignerId: defaultCosigner } = useDemoMode();
   const cosignerId = useSearchParams().get("userId")?.trim() || defaultCosigner;
   const { status, lastEvent, syncVersion, resyncVersion } = useEventStream({ channel: "cosign", userId: cosignerId });
@@ -253,6 +255,7 @@ function CosignTopbar({ pathname }: { pathname: string }) {
               value={mode}
               onChange={next => {
                 setMode(next);
+                router.replace(cosignHref(next));
               }}
               className="w-full"
             />

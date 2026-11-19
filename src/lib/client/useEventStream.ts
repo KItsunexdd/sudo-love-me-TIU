@@ -21,7 +21,7 @@ const eventTypes = ["COSIGN_REQUESTED", "TX_UPDATED", "SECURITY_ALERT", "DEMO_RE
 const maxEvents = 100;
 type Listener = () => void;
 
-function connect(filter: EventFilter, set: (update: (previous: Snapshot) => Snapshot) => void) {
+function connect(filter: EventFilter, set: (update: (previous: Snapshot) => Snapshot) => void, onReset?: () => void) {
   const lifetime = new AbortController();
   let source: EventSource | undefined;
   let reconnect: ReturnType<typeof setTimeout> | undefined;
@@ -44,7 +44,10 @@ function connect(filter: EventFilter, set: (update: (previous: Snapshot) => Snap
     for (const event of batch.sort((left, right) => left.id - right.id)) {
       if (event.id <= (cursor ?? -1)) continue;
       cursor = event.id;
-      if (event.type === "DEMO_RESET") unique.length = 0;
+      if (event.type === "DEMO_RESET") {
+        unique.length = 0;
+        onReset?.();
+      }
       unique.push(event);
     }
     if (!unique.length && !reset) return;
@@ -173,10 +176,10 @@ function updateSnapshot(next: Snapshot) {
 
 // One transport per tab. Changing the page or persona closes the old scope first.
 export const tabEvents = {
-  open(scope: EventFilter) {
+  open(scope: EventFilter, onReset?: () => void) {
     stopConnection?.();
     updateSnapshot(initial);
-    const stop = connect(scope, fn => updateSnapshot(fn(snapshot)));
+    const stop = connect(scope, fn => updateSnapshot(fn(snapshot)), onReset);
     stopConnection = stop;
     return () => {
       if (stopConnection !== stop) return;
@@ -207,10 +210,10 @@ export const tabEvents = {
   },
 };
 
-export function useTabEventConnection({ userId, channel }: EventFilter, enabled: boolean) {
+export function useTabEventConnection({ userId, channel }: EventFilter, enabled: boolean, onReset: () => void) {
   useEffect(() => {
-    if (enabled) return tabEvents.open({ userId, channel });
-  }, [userId, channel, enabled]);
+    if (enabled) return tabEvents.open({ userId, channel }, onReset);
+  }, [userId, channel, enabled, onReset]);
 }
 
 export function useEventStream({ userId, channel }: EventFilter) {

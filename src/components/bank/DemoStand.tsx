@@ -7,7 +7,6 @@ import { CosignEmbedSlot } from "@/components/cosign/CosignEmbedSlot";
 import { CryptoInspectorDrawer } from "@/components/crypto/CryptoInspectorDrawer";
 import { useTransaction } from "@/components/crypto/useTransaction";
 import { AttackSimulatorPanel } from "@/components/hacker/AttackSimulatorPanel";
-import { resetAttackState } from "@/components/hacker/attacks";
 import { QuantumCompareModal } from "@/components/hacker/QuantumCompareModal";
 import { Button, Card, ErrorCard, PhoneFrame, SegmentedControl, Skeleton } from "@/components/ui";
 import { api, type ApiError, type ApiResult, type DemoUsersResponse, type ExecuteResponse, type PrepareInput, type PrepareResponse } from "@/lib/client/api";
@@ -117,7 +116,7 @@ function DemoSession({ sender, cosigner, mode, presets, refresh }: StandProps) {
   const [busy, setBusy] = useState(false);
   const [attempt, setAttempt] = useState<Attempt>();
   const [receipt, setReceipt] = useState(false);
-  const [inspector, setInspector] = useState<string | null>(null);
+  const [inspector, setInspector] = useState<{ id: string; attemptError?: ApiError } | null>(null);
   const [quantum, setQuantum] = useState(false);
   const { devices, unavailable, loading } = useLocalDevices();
   const { status, syncVersion, resyncVersion } = useEventStream({ userId: sender.id });
@@ -139,7 +138,10 @@ function DemoSession({ sender, cosigner, mode, presets, refresh }: StandProps) {
 
   useEffect(() => {
     mounted.current = true;
-    const readInspector = () => setInspector(new URL(window.location.href).searchParams.get("txId") || null);
+    const readInspector = () => {
+      const id = new URL(window.location.href).searchParams.get("txId");
+      setInspector(id ? { id } : null);
+    };
     readInspector();
     window.addEventListener("popstate", readInspector);
     return () => { mounted.current = false; window.removeEventListener("popstate", readInspector); };
@@ -216,13 +218,13 @@ function DemoSession({ sender, cosigner, mode, presets, refresh }: StandProps) {
     refresh();
   }
 
-  function inspect(id: string | null) {
+  function inspect(id: string | null, attemptError?: ApiError) {
     const url = new URL(window.location.href);
     if (id) url.searchParams.set("txId", id);
     else url.searchParams.delete("txId");
     window.history.replaceState(null, "", url);
     setQuantum(false);
-    setInspector(id);
+    setInspector(id ? { id, attemptError } : null);
   }
 
   const openQuantum = () => { inspect(null); setQuantum(true); };
@@ -267,7 +269,7 @@ function DemoSession({ sender, cosigner, mode, presets, refresh }: StandProps) {
               error={attempt.error}
               http={attempt.http}
               cosigner={cosigner.fullName}
-              onInspect={() => inspect(attempt.id)}
+              onInspect={error => inspect(attempt.id, error)}
               onCosign={() => setTab("cosign")}
               onNew={() => newForm(business ? "supplier" : "son")}
             />
@@ -350,7 +352,7 @@ function DemoSession({ sender, cosigner, mode, presets, refresh }: StandProps) {
           onFallback={() => { setPrepared(null); setDeviceDialog("software"); }}
         />
       )}
-      {inspector && <CryptoInspectorDrawer userId={sender.id} txId={inspector} onClose={() => inspect(null)} onQuantum={openQuantum} />}
+      {inspector && <CryptoInspectorDrawer userId={sender.id} txId={inspector.id} attemptError={inspector.attemptError} onClose={() => inspect(null)} onQuantum={openQuantum} />}
       {quantum && <QuantumCompareModal sample={sample} deviceId={device?.id} onClose={() => setQuantum(false)} onInspect={inspect} onResult={complete} />}
     </main>
   );
@@ -362,7 +364,7 @@ export function DemoStand() {
   const { events } = useEventStream({ userId: senderId });
   const latestReset = events.findLast(event => event.type === "DEMO_RESET")?.id;
   const [reset, setReset] = useState(0);
-  useEffect(() => { if (latestReset) { setReset(latestReset); resetAttackState(); } }, [latestReset]);
+  useEffect(() => { if (latestReset) setReset(latestReset); }, [latestReset]);
   const sender = users.find(user => user.id === senderId);
   const cosigner = users.find(user => user.id === cosignerId);
 

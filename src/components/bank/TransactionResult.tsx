@@ -11,12 +11,12 @@ import { AttackBlockedShield } from "@/components/hacker/AttackBlockedShield";
 
 export function TransactionResult({ attemptId, record, error, http, cosigner, onInspect, onNew, onCosign }: {
   attemptId?: string; record?: TransactionRecord; error?: ApiError; http?: number; cosigner?: string;
-  onInspect: () => void; onNew: () => void; onCosign: () => void;
+  onInspect: (attemptError?: ApiError) => void; onNew: () => void; onCosign: () => void;
 }) {
   const reduce = useReducedMotion();
   const actions = (
     <div className="flex flex-wrap gap-2">
-      <Button variant="secondary" size="sm" icon={<Microscope size={15} />} onClick={onInspect}>Открыть Crypto Inspector</Button>
+      <Button variant="secondary" size="sm" icon={<Microscope size={15} />} onClick={() => onInspect()}>Открыть Crypto Inspector</Button>
       <Button variant="ghost" size="sm" icon={<Plus size={15} />} onClick={onNew}>Новая операция</Button>
     </div>
   );
@@ -27,7 +27,7 @@ export function TransactionResult({ attemptId, record, error, http, cosigner, on
         key={attemptId ?? error.failureCode}
         error={error}
         httpStatus={http}
-        onInspect={onInspect}
+        onInspect={() => onInspect(error)}
         onReset={onNew}
       />
     );
@@ -81,7 +81,7 @@ export function TransactionResult({ attemptId, record, error, http, cosigner, on
             <p>{waiting ? "Запрос на подпись" : "Решение принял участник"} · <span className="font-semibold">{cosigner}</span></p>
             <p className="text-ink-secondary">
               {waiting ? (
-                <>Риск <span className="font-mono font-semibold tabular-nums text-amber-300">{record.riskScore}/100</span>. Средства заморожены до подтверждения.</>
+                <>Риск <span className="font-mono font-semibold tabular-nums text-amber-300">{record.riskScore}/100</span>. Перевод приостановлен до второй подписи. Доступный остаток проверим при исполнении.</>
               ) : (
                 "Деньги остались на счёте в полной сохранности."
               )}
