@@ -1,4 +1,5 @@
 "use client";
+import { demoParticipants } from "@/lib/demo/participants";
 
 import { useSearchParams } from "next/navigation";
 import { createContext, Suspense, useContext, useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
@@ -7,10 +8,7 @@ import type { Mode } from "@/lib/db/types";
 const storageKey = "safesign:demo-mode";
 const modeEvent = "safesign:mode-change";
 const defaultMode: Mode = "B2C";
-export const demoParticipants = {
-  B2C: { senderId: "usr_aigul", cosignerId: "usr_arman" },
-  B2B: { senderId: "usr_dinara", cosignerId: "usr_timur" },
-} as const satisfies Record<Mode, { senderId: string; cosignerId: string }>;
+export { demoParticipants };
 
 function parseMode(value: string | null) {
   const mode = value?.toUpperCase();

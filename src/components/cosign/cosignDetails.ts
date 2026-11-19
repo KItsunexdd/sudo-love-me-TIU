@@ -1,4 +1,4 @@
-import { demoParticipants } from "@/components/shell/DemoModeProvider";
+import { demoParticipants } from "@/lib/demo/participants";
 import { bytesToHex, fromBase64, sha256 } from "@/lib/crypto/canonical";
 import type { Mode, SignatureBundle } from "@/lib/db/types";
 
