@@ -19,7 +19,7 @@ import { GET as poll } from "@/app/api/events/poll/route";
 import { POST as reset } from "@/app/api/demo/reset/route";
 import { assertSoftware, registerSoftware } from "@/lib/crypto/software-authenticator";
 import { fromBase64, toBase64 } from "@/lib/crypto/canonical";
-import { cosignMessage, keygen, primaryMessage, sign } from "@/lib/crypto/mldsa";
+import { cosignMessage, createPqProofOfPossession, keygen, primaryMessage, sign } from "@/lib/crypto/mldsa";
 import { recipientPresets } from "@/lib/db/seed";
 import type { CanonicalTxPayload, SecurityEvent } from "@/lib/db/types";
 
@@ -49,7 +49,8 @@ async function registration(userId: string) {
   expect(opts.rpId).toBe("localhost");
   const { response, credential } = await registerSoftware(opts);
   const pq = keygen();
-  const body = { ...input, deviceKind: "SOFTWARE_FALLBACK", attestationResponse: response, pqPublicKeyBase64: toBase64(pq.publicKey) };
+  const body = { ...input, deviceKind: "SOFTWARE_FALLBACK", attestationResponse: response, pqPublicKeyBase64: toBase64(pq.publicKey),
+    pqProofOfPossessionBase64: createPqProofOfPossession(userId, response.id, opts.challenge, pq.secretKey) };
   return { body, credential, pq, challengeId: opts.challengeId };
 }
 
@@ -132,6 +133,7 @@ describe("REST §7", () => {
     const prepared = await read(cosignPrepare(req("transactions/cosign/prepare", context)));
     let expectedStatus: string;
     if (decision === "submit") {
+      await read(revoke(new Request(bank + "/api/devices?id=" + sender.deviceId, { method: "DELETE" })));
       const message = cosignMessage(hexToBytes(prepared.txHashHex), fromBase64(packet.pqSignatureBase64));
       const second = { txId, deviceId: son.deviceId, webAuthnAssertion: await assertSoftware(son.credential, prepared.webAuthnOptions),
         pqSignatureBase64: toBase64(sign(message, son.pq.secretKey)) };
@@ -155,7 +157,7 @@ describe("REST §7", () => {
     expect(state.users[0].coolingOffActive).toBe(decision === "reject");
     expect(state.recipientPresets).toEqual(recipientPresets);
     await read(reset(req("demo/reset", { keepDevices: true })));
-    expect((await read(devices(req("devices?userId=usr_aigul")))).devices).toHaveLength(1);
+    expect((await read(devices(req("devices?userId=usr_arman")))).devices).toHaveLength(1);
     expect((await read(soc(req("soc/events")))).events).toEqual([]);
     expect((await read(users(req("users")))).users[0].balanceTenge).toBe(1_200_000);
     await read(reset(req("demo/reset", { keepDevices: false })));
@@ -163,7 +165,18 @@ describe("REST §7", () => {
   });
 
   it("проверяет одноразовую регистрацию, длину ключа, origin, привязку challenge и отзыв", async () => {
-    const { body, challengeId } = await registration(aigul);
+    const { body, challengeId, pq } = await registration(aigul);
+    expect(await read(verify(req("auth/register/verify", { ...body, pqProofOfPossessionBase64: undefined })), 400))
+      .toMatchObject({ failureCode: "ERR_INVALID_INPUT" });
+    for (const proof of [
+      createPqProofOfPossession(arman, body.attestationResponse.id, challengeId, pq.secretKey),
+      createPqProofOfPossession(aigul, "other-credential", challengeId, pq.secretKey),
+      createPqProofOfPossession(aigul, body.attestationResponse.id, "other-challenge", pq.secretKey),
+      createPqProofOfPossession(aigul, body.attestationResponse.id, challengeId, keygen().secretKey),
+    ]) {
+      expect(await read(verify(req("auth/register/verify", { ...body, pqProofOfPossessionBase64: proof })), 403))
+        .toMatchObject({ failureCode: "ERR_PQ_SIGNATURE_INVALID" });
+    }
     expect((await read(verify(req("auth/register/verify", { ...body, pqPublicKeyBase64: toBase64(new Uint8Array(1953)) })), 400))
       .failureCode).toBe("ERR_INVALID_INPUT");
     expect((await read(verify(req("auth/register/verify", body, { Origin: other })), 403)).failureCode).toBe("ERR_ORIGIN_MISMATCH");
@@ -171,6 +184,10 @@ describe("REST §7", () => {
     const response = await read(verify(req("auth/register/verify", { ...body, deviceKind: undefined, challengeId })));
     expect(response.device.deviceKind).toBe("PLATFORM_PASSKEY");
     await read(verify(req("auth/register/verify", body)), 403);
+    const otherUser = await registration(arman);
+    const duplicate = { ...otherUser.body, pqPublicKeyBase64: body.pqPublicKeyBase64,
+      pqProofOfPossessionBase64: createPqProofOfPossession(arman, otherUser.body.attestationResponse.id, otherUser.challengeId, pq.secretKey) };
+    expect(await read(verify(req("auth/register/verify", duplicate)), 403)).toMatchObject({ failureCode: "ERR_DEVICE_NOT_ALLOWED" });
     const { devices: list } = await read(devices(req("devices?userId=" + aigul)));
     expect(list).toHaveLength(1);
     const url = bank + "/api/devices?id=" + list[0].id;
@@ -185,7 +202,7 @@ describe("REST §7", () => {
     await read(revoke(new Request(bank + "/api/devices?id=" + old.deviceId, { method: "DELETE" })));
     const replacement = await enroll(aigul);
     expect(replacement.deviceId).not.toBe(old.deviceId);
-    expect((await read(execute(req("transactions/execute", outstanding)), 403)).failureCode).toBe("ERR_WEBAUTHN_INVALID");
+    expect((await read(execute(req("transactions/execute", outstanding)), 403)).failureCode).toBe("ERR_DEVICE_NOT_ALLOWED");
     expect((await read(execute(req("transactions/execute", await primary(replacement))))).status).toBe("EXECUTED");
   });
 
@@ -200,11 +217,23 @@ describe("REST §7", () => {
   });
 
   it("отказывает до выдачи challenge при нехватке средств на выбранном счёте", async () => {
-    for (const input of [{ ...low, amountTenge: 1_200_001 }, { ...low, operationType: "DEPOSIT_CLOSE", amountTenge: 2_500_001 }]) {
+    for (const input of [{ ...low, amountTenge: 1_200_001 }, { ...low, operationType: "DEPOSIT_CLOSE", recipientAccount: "KZ868560000004512890", amountTenge: 2_500_001 }]) {
       expect((await read(prepare(req("transactions/prepare", input)), 409)).failureCode).toBe("ERR_INSUFFICIENT_FUNDS");
     }
     expect((await read(transactions(req("transactions")))).transactions).toEqual([]);
     expect((await read(poll(req("events/poll?since=0")))).events).toHaveLength(1); // reset only
+  });
+
+  it("возвращает HTTP 400 с причиной для неверных реквизитов и превышения лимита кредита", async () => {
+    for (const [input, message] of [
+      [{ ...low, recipientName: "Арман\u202E" }, /невидимые символы/],
+      [{ ...low, purpose: "На\u200B продукты" }, /невидимые символы/],
+      [{ ...low, operationType: "DEPOSIT_CLOSE" }, /собственный счёт/],
+      [{ ...low, operationType: "ONLINE_LOAN", amountTenge: 3_000_001 }, /3 000 000/],
+    ] as const) {
+      const result = await read(prepare(req("transactions/prepare", input)), 400);
+      expect(result).toMatchObject({ failureCode: "ERR_INVALID_INPUT", message: expect.stringMatching(message) });
+    }
   });
 
   it("возвращает JSON для ошибок запроса, отсутствующих записей и отказа хранилища", async () => {

@@ -4,11 +4,11 @@ import { bytesToHex, fromBase64, hashPayload, sha256 } from "@/lib/crypto/canoni
 import { cosignChallenge } from "@/lib/crypto/mldsa";
 import { authenticationOptions, relyingParty } from "@/lib/crypto/webauthn";
 import { isExpired, verifyCosign, verifyPrimary, type PrimaryPacket, type SignedPacket } from "@/lib/crypto/hybrid-verifier";
-import { getStorage, type StorageAdapter, type UnitOfWork } from "@/lib/db/store";
+import { getStorage, type SigningRole, type StorageAdapter, type UnitOfWork } from "@/lib/db/store";
 import { failureMessages, type CanonicalTxPayload, type Database, type FailureCode, type SecurityEvent,
   type SignatureBundle, type TransactionRecord, type TxStatus, type User } from "@/lib/db/types";
-import { assessRisk } from "@/lib/risk/engine";
-import { failure, failureFrom, requireTx, type Failure } from "./errors";
+import { assessRisk, bankCoSignReason, requiresBankCoSign } from "@/lib/risk/engine";
+import { failure, failureFrom, isCryptoFailure, requireTx, type Failure } from "./errors";
 import { prepareSchema, riskPreviewSchema, cosignerSchema, cosignSubmitSchema, executeSchema, rejectSchema } from "./inputs";
 
 const MINUTE = 60_000;
@@ -18,6 +18,13 @@ export const COOLING_OFF = 24 * 60 * MINUTE;
 
 function checkCoolingOff(sender: User, now: Date) {
   requireTx(!sender.coolingOffUntil || Date.parse(sender.coolingOffUntil) <= now.getTime(), "ERR_COOLING_OFF");
+}
+
+function assignedCosigner(db: Database, mode: CanonicalTxPayload["mode"], id?: string) {
+  const role = mode === "B2B" ? "DIRECTOR_B2B" : "COSIGNER_FAMILY";
+  const cosigner = db.users.find(user => user.id === id && user.role === role);
+  requireTx(cosigner, "ERR_COSIGNER");
+  return cosigner.id;
 }
 
 function updated(unit: UnitOfWork, tx: TransactionRecord, now: Date) {
@@ -58,13 +65,24 @@ function pending(unit: UnitOfWork, txId: string, cosignerUserId: string, now: Da
   return { ok: true as const, tx, primary: tx.primarySignature };
 }
 
+function checkProductLimits(sender: User, { operationType, amountTenge, recipientAccount }:
+  Pick<CanonicalTxPayload, "operationType" | "amountTenge" | "recipientAccount">) {
+  if (operationType === "DEPOSIT_CLOSE") {
+    requireTx(recipientAccount === sender.accountIban, "ERR_INVALID_INPUT", "Депозит можно зачислить только на собственный счёт");
+  }
+  if (operationType === "ONLINE_LOAN") {
+    requireTx(amountTenge <= 3_000_000 - (sender.loanBalanceTenge ?? 0), "ERR_INVALID_INPUT",
+      "Общая сумма задолженности по демо-кредитам ограничена 3 000 000 ₸");
+  }
+}
+
 function fundingSource(sender: User, { operationType, amountTenge }: Pick<CanonicalTxPayload, "operationType" | "amountTenge">) {
   const source = operationType === "DEPOSIT_CLOSE" ? "depositBalanceTenge" : "balanceTenge";
   if (operationType !== "ONLINE_LOAN") requireTx(sender[source] >= amountTenge, "ERR_INSUFFICIENT_FUNDS");
   return source;
 }
 
-function settle(unit: UnitOfWork, tx: TransactionRecord, sender: User) {
+function prepareSettlement(unit: UnitOfWork, tx: TransactionRecord, sender: User) {
   const { amountTenge, recipientAccount, operationType } = tx.payload;
   const recipient = unit.db.users.find(u => u.accountIban === recipientAccount);
   const source = fundingSource(sender, tx.payload);
@@ -73,10 +91,12 @@ function settle(unit: UnitOfWork, tx: TransactionRecord, sender: User) {
   if (recipient) requireTx(Number.isSafeInteger(recipient.balanceTenge + proceeds), "ERR_INVALID_INPUT");
   if (loan) requireTx(Number.isSafeInteger((sender.loanBalanceTenge ?? 0) + amountTenge), "ERR_INVALID_INPUT");
 
-  if (loan) sender.loanBalanceTenge = (sender.loanBalanceTenge ?? 0) + amountTenge;
-  else sender[source] -= amountTenge;
-  if (recipient) recipient.balanceTenge += amountTenge;
-  tx.status = "EXECUTED";
+  return () => {
+    if (loan) sender.loanBalanceTenge = (sender.loanBalanceTenge ?? 0) + amountTenge;
+    else sender[source] -= amountTenge;
+    if (recipient) recipient.balanceTenge += amountTenge;
+    tx.status = "EXECUTED";
+  };
 }
 
 const alertType: Partial<Record<FailureCode, SecurityEvent["eventType"]>> = {
@@ -85,7 +105,7 @@ const alertType: Partial<Record<FailureCode, SecurityEvent["eventType"]>> = {
   ERR_WEBAUTHN_INVALID: "WEBAUTHN_REJECTED",
 };
 
-function recordFailure(unit: UnitOfWork, tx: TransactionRecord, result: Failure, now: Date, details: Record<string, unknown>) {
+function recordFailure(unit: UnitOfWork, tx: TransactionRecord, role: SigningRole, result: Failure, now: Date, details: Record<string, unknown>) {
   const rejection = { ...details, failureCode: result.failureCode, verificationTrace: result.verificationTrace, tamperDiff: result.tamperDiff };
   if (result.failureCode === "ERR_TX_EXPIRED" && tx.status !== "EXPIRED") {
     tx.verificationTrace = result.verificationTrace;
@@ -93,7 +113,7 @@ function recordFailure(unit: UnitOfWork, tx: TransactionRecord, result: Failure,
     return;
   }
   // Only the attempt which actually claimed this role's nonce may close its transaction.
-  if (result.verificationTrace[1]?.passed) {
+  if (isCryptoFailure(result.failureCode) && unit.consumeNonce(tx.id, role)) {
     tx.verificationTrace = result.verificationTrace;
     tx.tamperDiff = result.tamperDiff;
     tx.failureCode = result.failureCode;
@@ -109,6 +129,7 @@ function assessRequest(input: z.infer<typeof riskPreviewSchema>, db: Database, n
   const b2b = input.mode === "B2B";
   requireTx(sender.role === (b2b ? "ACCOUNTANT_B2B" : "CLIENT_B2C") &&
     b2b === (input.operationType === "B2B_INVOICE"), "ERR_INVALID_INPUT");
+  checkProductLimits(sender, input);
   return { sender, risk: assessRisk(input, sender, db.blacklist, now) };
 }
 
@@ -124,9 +145,13 @@ export class TransactionService {
   }
 
   async preview(request: unknown) {
-    const input = riskPreviewSchema.parse(request);
-    const { risk } = assessRequest(input, await this.storage.snapshot(), this.clock());
-    return { risk };
+    try {
+      const input = riskPreviewSchema.parse(request);
+      const { risk } = assessRequest(input, await this.storage.snapshot(), this.clock());
+      return { risk };
+    } catch (error) {
+      return failureFrom(error);
+    }
   }
 
   prepare(request: unknown) {
@@ -137,9 +162,7 @@ export class TransactionService {
       const { sender, risk } = assessRequest(input, db, now);
       checkCoolingOff(sender, now);
       fundingSource(sender, input);
-      const cosignerUserId = risk.requiresCoSign ? sender.linkedCosignerId : undefined;
-      requireTx(!risk.requiresCoSign || db.users.some(u => u.id === cosignerUserId &&
-        u.role === (input.mode === "B2B" ? "DIRECTOR_B2B" : "COSIGNER_FAMILY")), "ERR_COSIGNER");
+      const cosignerUserId = risk.requiresCoSign ? assignedCosigner(db, input.mode, sender.linkedCosignerId) : undefined;
       const txId = "tx_" + crypto.randomUUID();
       const payload: CanonicalTxPayload = {
         amountTenge: input.amountTenge, currency: "KZT", createdAt: now.toISOString(),
@@ -173,27 +196,43 @@ export class TransactionService {
 
   private async submit(unit: UnitOfWork, attempt: { primary: true; packet: PrimaryPacket } | { primary: false; packet: SignedPacket }, requestOrigin?: string) {
     const now = this.clock;
-    const applyPolicy = (tx: TransactionRecord, signature: SignatureBundle) => {
+    const preparePolicy = (tx: TransactionRecord) => {
       const sender = unit.db.users.find(u => u.id === tx.payload.senderId);
       requireTx(sender, "ERR_USER_NOT_FOUND");
       checkCoolingOff(sender, now());
-      if (attempt.primary && tx.riskLevel === "MEDIUM") requireTx(attempt.packet.acknowledgedWarning, "ERR_ACK_REQUIRED");
-      if (attempt.primary && tx.requiresCoSign) {
-        tx.status = "PENDING_COSIGN";
-        tx.cosignExpiresAt = new Date(now().getTime() + COSIGN_TTL).toISOString();
-      } else {
-        settle(unit, tx, sender);
+      checkProductLimits(sender, tx.payload);
+      const bankCoSign = requiresBankCoSign(tx.payload);
+      if (attempt.primary && (tx.requiresCoSign || bankCoSign)) {
+        const cosignerId = assignedCosigner(unit.db, tx.payload.mode, tx.cosignerUserId ?? sender.linkedCosignerId);
+        fundingSource(sender, tx.payload);
+        return (signature: SignatureBundle) => {
+          tx.primarySignature = signature;
+          tx.cosignerUserId = cosignerId;
+          tx.requiresCoSign = true;
+          if (bankCoSign) {
+            tx.riskLevel = "HIGH";
+            if (!tx.riskReasons.includes(bankCoSignReason)) tx.riskReasons.push(bankCoSignReason);
+          }
+          tx.status = "PENDING_COSIGN";
+          tx.cosignExpiresAt = new Date(Date.parse(signature.signedAt) + COSIGN_TTL).toISOString();
+        };
       }
-      if (attempt.primary) tx.primarySignature = signature;
-      else tx.cosignSignature = signature;
+      if (!attempt.primary) assignedCosigner(unit.db, tx.payload.mode, tx.cosignerUserId);
+      if (attempt.primary && tx.riskLevel === "MEDIUM") requireTx(attempt.packet.acknowledgedWarning, "ERR_ACK_REQUIRED");
+      const settle = prepareSettlement(unit, tx, sender);
+      return (signature: SignatureBundle) => {
+        settle();
+        if (attempt.primary) tx.primarySignature = signature;
+        else tx.cosignSignature = signature;
+      };
     };
-    const context = { unit, clock: now, applyPolicy, requestOrigin };
+    const context = { unit, clock: now, preparePolicy, requestOrigin };
     const result = attempt.primary ? await verifyPrimary(context, attempt.packet) : await verifyCosign(context, attempt.packet);
     const timestamp = now();
     const details = attempt.primary && attempt.packet.attackTag ? { attackTag: attempt.packet.attackTag } : {};
     if (!result.ok) {
       const tx = unit.db.transactions.find(t => t.id === attempt.packet.txId);
-      if (tx) recordFailure(unit, tx, result, timestamp, details);
+      if (tx) recordFailure(unit, tx, attempt.primary ? "primary" : "cosign", result, timestamp, details);
       else audit(unit, { id: attempt.packet.txId }, timestamp, "TX_POLICY_REJECTED", "WARNING", result.message,
         { ...details, failureCode: result.failureCode, verificationTrace: result.verificationTrace });
       return result;

@@ -5,7 +5,7 @@ import {
 } from "@simplewebauthn/server";
 import type { DeviceKind, RegisteredDevice, User } from "@/lib/db/types";
 import { bytesToHex, fromBase64, fromBase64Url, sha256, toBase64Url, utf8 } from "./canonical";
-import { ML_DSA_BYTES } from "./mldsa";
+import { isValidPqPublicKey, pqProofMessage, verify } from "./mldsa";
 import { requireTx, TxError } from "@/lib/tx/errors";
 
 export function relyingParty() {
@@ -34,13 +34,19 @@ export function registrationOptions(user: User, devices: RegisteredDevice[] = []
 // expectedChallenge and user must come from the same server-side registration ceremony.
 export async function verifyRegistration(input: {
   user: User; deviceName: string; deviceKind: DeviceKind; expectedChallenge: string;
-  response: RegistrationResponseJSON; pqPublicKeyBase64: string;
+  response: RegistrationResponseJSON; pqPublicKeyBase64: string; pqProofOfPossessionBase64: string;
 }): Promise<RegisteredDevice> {
   const { rpId, expectedOrigin } = relyingParty();
   let publicKey: Uint8Array;
-  try { publicKey = fromBase64(input.pqPublicKeyBase64); }
+  let proof: Uint8Array;
+  try {
+    publicKey = fromBase64(input.pqPublicKeyBase64);
+    proof = fromBase64(input.pqProofOfPossessionBase64);
+  }
   catch { throw new TxError("ERR_INVALID_INPUT"); }
-  requireTx(publicKey.length === ML_DSA_BYTES.publicKey, "ERR_INVALID_INPUT");
+  requireTx(isValidPqPublicKey(publicKey), "ERR_INVALID_INPUT");
+  requireTx(verify(proof, pqProofMessage(input.user.id, input.response.id, input.expectedChallenge), publicKey),
+    "ERR_PQ_SIGNATURE_INVALID");
   const result = await verifyRegistrationResponse({
     response: input.response, expectedChallenge: input.expectedChallenge,
     expectedOrigin, expectedRPID: rpId, supportedAlgorithmIDs: [-7], requireUserVerification: true,

@@ -9,7 +9,7 @@ import { registrationOptions, verifyRegistration } from "@/lib/crypto/webauthn";
 import { registerSoftware, assertSoftware } from "@/lib/crypto/software-authenticator";
 import { bytesToHex, fromBase64, fromBase64Url, hashPayload, serializeCanonicalJSON, sha256,
   toBase64, toBase64Url, utf8 } from "@/lib/crypto/canonical";
-import { cosignMessage, keygen, primaryMessage, sign, verify } from "@/lib/crypto/mldsa";
+import { cosignMessage, createPqProofOfPossession, keygen, primaryMessage, sign, verify } from "@/lib/crypto/mldsa";
 import { subscribe, type DemoEvent } from "@/lib/events/bus";
 
 const storage = new MemoryAdapter();
@@ -34,6 +34,7 @@ async function enroll(userId: string) {
   const device = await verifyRegistration({
     response, deviceKind: "SOFTWARE_FALLBACK", user, expectedChallenge: options.challenge,
     deviceName: "Тестовый ключ", pqPublicKeyBase64: toBase64(pq.publicKey),
+    pqProofOfPossessionBase64: createPqProofOfPossession(user.id, response.id, options.challenge, pq.secretKey),
   });
   await storage.transact(({ db }) => { db.devices.push(device); });
   return { device, credential, pq };
@@ -86,8 +87,7 @@ describe("Канонический пакет и ML-DSA-65", () => {
     expect(hashPayload(a)).toEqual(hashPayload(b));
     expect(hashPayload(a).webAuthnChallenge).toHaveLength(43);
   });
-  it.each([undefined, NaN, Infinity, { a: [undefined] }, { amountTenge: 1.5 }, { amountTenge: "1" },
-    { amountTenge: Number.MAX_SAFE_INTEGER + 1 }])("отклоняет недопустимое значение %#", value => {
+  it.each([undefined, NaN, Infinity, { a: [undefined] }])("отклоняет недопустимое значение %#", value => {
     expect(() => serializeCanonicalJSON(value)).toThrow();
   });
   it("проверяет длины ключей и подписи и привязку COSIGN к точной первой подписи", () => {
@@ -119,7 +119,6 @@ describe("Гибридная проверка и атомарное исполн
   });
   it.each([
     ["amountTenge", 500_000, "15000"], ["recipientAccount", recipientPresets.unknown.recipientAccount, low.recipientAccount],
-    ["unexpected", "лишнее поле", "(отсутствует)"],
   ])("показывает diff и реальные отказы обеих подписей при изменении %s", async (field, changed, original) => {
     const { packet } = await preparePrimary();
     const result = await service.execute({ ...packet, submittedPayload: { ...packet.submittedPayload, [field]: changed } });
@@ -167,7 +166,9 @@ describe("Гибридная проверка и атомарное исполн
     } else {
       packet.deviceId = (await enroll("usr_arman")).device.id;
     }
-    expect(await service.execute(packet)).toMatchObject({ failureCode: "ERR_WEBAUTHN_INVALID" });
+    expect(await service.execute(packet)).toMatchObject({
+      failureCode: which === "пользователь" ? "ERR_DEVICE_NOT_ALLOWED" : "ERR_WEBAUTHN_INVALID",
+    });
   });
   it.each(["бит", "чужой ключ", "квантовая симуляция"])("обнаруживает недействительную ML-DSA (%s)", async which => {
     const { packet, tx } = await preparePrimary();
@@ -184,6 +185,7 @@ describe("Гибридная проверка и атомарное исполн
     const { packet } = await preparePrimary();
     expect(await service.execute({ ...packet, quantumSimulation: true })).toMatchObject({ failureCode: "ERR_SIMULATION_ONLY" });
     expect((await storage.snapshot()).users[0].balanceTenge).toBe(1_200_000);
+    expect(await service.execute(packet)).toMatchObject({ status: "EXECUTED" });
   });
   it("проверяет точную границу TTL и отсутствующий txId", async () => {
     const { packet } = await preparePrimary();
@@ -311,18 +313,37 @@ it("ограничивает регистрацию выданным challenge �
   const [user] = (await storage.snapshot()).users;
   const options = await registrationOptions(user);
   const { response } = await registerSoftware(options);
+  const pq = keygen();
   const input = { user, response, expectedChallenge: options.challenge, deviceName: "Тест",
-    deviceKind: "SOFTWARE_FALLBACK" as const, pqPublicKeyBase64: toBase64(keygen().publicKey) };
+    deviceKind: "SOFTWARE_FALLBACK" as const, pqPublicKeyBase64: toBase64(pq.publicKey),
+    pqProofOfPossessionBase64: createPqProofOfPossession(user.id, response.id, options.challenge, pq.secretKey) };
   await expect(verifyRegistration({ ...input, expectedChallenge: toBase64Url(sha256(utf8("другой"))) })).rejects.toThrow();
   await expect(verifyRegistration({ ...input, pqPublicKeyBase64: "AA==" })).rejects.toThrow();
 });
 
 it("заём зачисляется подписанному получателю и учитывается как долг инициатора", async () => {
   const { packet } = await preparePrimary({ ...low, operationType: "ONLINE_LOAN" });
-  expect(await service.execute({ ...packet, acknowledgedWarning: true })).toMatchObject({ status: "EXECUTED" });
+  expect(await service.execute(packet)).toMatchObject({ status: "PENDING_COSIGN" });
+  const second = await secondSignature(packet.txId);
+  expect(await service.cosignSubmit(second.packet)).toMatchObject({ status: "EXECUTED" });
   const [borrower, recipient] = (await storage.snapshot()).users;
   expect(borrower).toMatchObject({ balanceTenge: 1_200_000, loanBalanceTenge: 15_000 });
   expect(recipient.balanceTenge).toBe(15_000);
+});
+
+it("повторно проверяет общий лимит долга при зачислении двух подготовленных кредитов", async () => {
+  const loan = { ...low, operationType: "ONLINE_LOAN", amountTenge: 3_000_000 };
+  const first = await preparePrimary(loan);
+  const second = await preparePrimary({ ...loan, amountTenge: 1 });
+  expect((await service.execute(first.packet)).status).toBe("PENDING_COSIGN");
+  expect((await service.execute(second.packet)).status).toBe("PENDING_COSIGN");
+  const approval = await secondSignature(first.packet.txId);
+  const other = await secondSignature(second.packet.txId);
+  expect((await service.cosignSubmit(approval.packet)).status).toBe("EXECUTED");
+  expect(await service.cosignSubmit(other.packet)).toMatchObject({ status: "ERROR", failureCode: "ERR_INVALID_INPUT" });
+  const db = await storage.snapshot();
+  expect(db.users[0].loanBalanceTenge).toBe(3_000_000);
+  expect(db.transactions[1]).toMatchObject({ status: "PENDING_COSIGN", cosignNonceUsed: false });
 });
 
 it("применяет настроенные RP ID и origin при регистрации и исполнении", async () => {

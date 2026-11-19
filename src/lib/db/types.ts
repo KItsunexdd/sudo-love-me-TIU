@@ -72,6 +72,8 @@ export interface SignatureBundle {
   deviceId: string;
   signedAt: string;
   webAuthnCredentialId: string;
+  webAuthnPublicKey?: string;
+  pqPublicKey?: string;
   webAuthnClientDataJson: string;
   webAuthnSignatureBytesLength: number;
   pqAlgorithm: "ML-DSA-65";
@@ -95,6 +97,7 @@ export const failureMessages = {
   ERR_TX_STATE: "Текущее состояние операции исключает это действие",
   ERR_USER_NOT_FOUND: "Пользователь не найден",
   ERR_DEVICE_NOT_FOUND: "У пользователя нет подходящего устройства",
+  ERR_DEVICE_NOT_ALLOWED: "Это устройство недоступно для подтверждения операции",
   ERR_COSIGNER: "Подтверждение доступно только назначенному доверенному лицу",
   ERR_COOLING_OFF: "По просьбе доверенного лица действует период охлаждения",
   ERR_INSUFFICIENT_FUNDS: "Недостаточно средств для исполнения",

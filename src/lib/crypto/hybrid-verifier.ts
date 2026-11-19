@@ -1,4 +1,3 @@
-import type { AuthenticationResponseJSON } from "@simplewebauthn/server";
 import type { SigningRole, UnitOfWork } from "@/lib/db/store";
 import type {
   FailureCode, RegisteredDevice, SignatureBundle,
@@ -7,28 +6,22 @@ import type {
 import { failureMessages } from "@/lib/db/types";
 import { failure, requireTx, TxError } from "@/lib/tx/errors";
 import type { z } from "zod";
-import type { executeSchema } from "@/lib/tx/inputs";
+import type { cosignSubmitSchema, executeSchema } from "@/lib/tx/inputs";
 import { bytesToHex, computeTamperDiff, fromBase64, fromBase64Url, hashPayload, sha256, toBase64Url, utf8 } from "./canonical";
 import { cosignMessage, primaryMessage, verify } from "./mldsa";
 import { relyingParty, verifyAuthentication } from "./webauthn";
 
-export interface SignedPacket {
-  txId: string;
-  deviceId: string;
-  webAuthnAssertion: AuthenticationResponseJSON;
-  pqSignatureBase64: string;
-  submittedPayload?: object;
-}
+export type SignedPacket = z.infer<typeof cosignSubmitSchema>;
 export type PrimaryPacket = z.infer<typeof executeSchema>;
 export interface VerificationContext {
   unit: UnitOfWork;
   requestOrigin?: string;
   clock(): Date;
-  applyPolicy(tx: TransactionRecord, signature: SignatureBundle): void;
+  preparePolicy(tx: TransactionRecord): (signature: SignatureBundle) => void;
 }
 
 const steps = [
-  ["TX_EXISTENCE_AND_TTL", "Состояние и срок действия"],
+  ["TX_EXISTENCE_AND_TTL", "Состояние, срок действия и допуск к операции"],
   ["REPLAY_PROTECTION", "Одноразовое подтверждение"],
   ["WYSIWYS_INTEGRITY", "Целостность реквизитов"],
   ["ORIGIN_AND_RPID", "Источник запроса и домен банка"],
@@ -37,7 +30,7 @@ const steps = [
   ["RISK_AND_POLICY_GATE", "Риск и исполнение операции"],
 ];
 
-type Check<T> = { ok: true; value: T } | { ok: false; code: FailureCode };
+type Check<T> = { ok: true; value: T } | { ok: false; code: FailureCode; message: string };
 
 class Trace {
   readonly rows: VerificationStepResult[] = steps.map(([code, label], i) => ({
@@ -53,8 +46,9 @@ class Trace {
       return { ok: true, value };
     } catch (error) {
       const code = error instanceof TxError ? error.code : fallback;
-      Object.assign(row, { outcome: "FAIL", details: failureMessages[code] });
-      return { ok: false, code };
+      const message = error instanceof TxError ? error.message : failureMessages[code];
+      Object.assign(row, { outcome: "FAIL", details: message });
+      return { ok: false, code, message };
     } finally {
       row.durationMs = performance.now() - start;
     }
@@ -62,9 +56,9 @@ class Trace {
 }
 
 export function isExpired(tx: TransactionRecord, now: Date) {
-  const deadline = tx.status === "PENDING_COSIGN" ? tx.cosignExpiresAt :
-    tx.status === "CHALLENGE_ISSUED" ? tx.payload.expiresAt : undefined;
-  return tx.status === "EXPIRED" || (deadline !== undefined && now.getTime() >= Date.parse(deadline));
+  if (tx.status !== "PENDING_COSIGN" && tx.status !== "CHALLENGE_ISSUED") return tx.status === "EXPIRED";
+  const deadline = Date.parse((tx.status === "PENDING_COSIGN" ? tx.cosignExpiresAt : tx.payload.expiresAt) ?? "");
+  return !(now.getTime() < deadline);
 }
 
 async function verifyHybrid(context: VerificationContext, packet: SignedPacket, role: SigningRole, simulation: boolean) {
@@ -76,17 +70,23 @@ async function verifyHybrid(context: VerificationContext, packet: SignedPacket, 
   const tx = db.transactions.find(item => item.id === packet.txId);
   const state = await trace.check(1, "ERR_TX_STATE", () => {
     requireTx(tx, "ERR_TX_NOT_FOUND");
+    if (primary ? tx.nonceUsed : tx.cosignNonceUsed) return null;
     requireTx(!isExpired(tx, clock()), "ERR_TX_EXPIRED");
-    // A completed attempt reaches the nonce CAS to report replay without reopening its state.
-    const alreadyUsed = primary ? tx.nonceUsed : tx.cosignNonceUsed;
-    requireTx(alreadyUsed || tx.status === (primary ? "CHALLENGE_ISSUED" : "PENDING_COSIGN"), "ERR_TX_STATE");
-    return tx;
+    requireTx(tx.status === (primary ? "CHALLENGE_ISSUED" : "PENDING_COSIGN"), "ERR_TX_STATE");
+    const signer = primary ? tx.payload.senderId : tx.cosignerUserId;
+    const device = db.devices.find(d => d.id === packet.deviceId && d.userId === signer);
+    requireTx(device, primary ? "ERR_DEVICE_NOT_ALLOWED" : "ERR_COSIGNER");
+    if (!primary) enforceIndependentDevice(device, tx.primarySignature, db.devices);
+    return { record: tx, device, applyPolicy: context.preparePolicy(tx) };
   });
-  if (!state.ok) return failure(state.code, trace.rows);
-  const record = state.value;
-  const nonce = await trace.check(2, "ERR_REPLAY_DETECTED", () =>
-    requireTx(unit.consumeNonce(record.id, role), "ERR_REPLAY_DETECTED"));
+  if (!state.ok) return failure(state.code, trace.rows, state.message);
+  // The storage transaction holds the lock through verification and final nonce consumption.
+  const nonce = await trace.check(2, "ERR_REPLAY_DETECTED", () => {
+    requireTx(state.value, "ERR_REPLAY_DETECTED");
+    return state.value;
+  });
   if (!nonce.ok) return failure(nonce.code, trace.rows);
+  const { record, device, applyPolicy } = nonce.value;
 
   const submitted = packet.submittedPayload ?? record.payload;
   const integrity = await trace.check(3, "ERR_INVALID_INPUT", () => {
@@ -109,47 +109,46 @@ async function verifyHybrid(context: VerificationContext, packet: SignedPacket, 
     const json = new TextDecoder().decode(fromBase64Url(assertion.response.clientDataJSON));
     const data = JSON.parse(json);
     const requestOrigin = context.requestOrigin ?? expectedOrigin;
-    requireTx(requestOrigin === expectedOrigin && data.origin === requestOrigin && record.payload.rpId === rpId, "ERR_ORIGIN_MISMATCH");
+    requireTx(requestOrigin === expectedOrigin && data.origin === requestOrigin && data.crossOrigin !== true &&
+      record.payload.rpId === rpId, "ERR_ORIGIN_MISMATCH");
     const authData = fromBase64Url(assertion.response.authenticatorData);
     requireTx(authData.length >= 37 && bytesToHex(authData.subarray(0, 32)) === bytesToHex(sha256(utf8(rpId))), "ERR_ORIGIN_MISMATCH");
+    const { userHandle } = assertion.response;
+    requireTx(!userHandle || userHandle === toBase64Url(utf8(device.userId)), "ERR_WEBAUTHN_INVALID");
     return json;
   });
   if (!origin.ok && !diff) return failure(origin.code, trace.rows);
 
-  const signer = primary ? record.payload.senderId : record.cosignerUserId;
-  const device = db.devices.find(d => d.id === packet.deviceId && d.userId === signer);
-  const classic = await trace.check(5, "ERR_WEBAUTHN_INVALID", async () => {
-    requireTx(device, "ERR_WEBAUTHN_INVALID");
-    if (!primary) enforceIndependentDevice(device, db.devices.find(d => d.id === record.primarySignature?.deviceId));
-    return verifyAuthentication(device, assertion, challenge);
-  });
+  const classic = await trace.check(5, "ERR_WEBAUTHN_INVALID", () => verifyAuthentication(device, assertion, challenge));
   if (!classic.ok && !diff && !simulation) return failure(classic.code, trace.rows);
   if (simulation && !diff) {
     Object.assign(trace.rows[4], { passed: false, outcome: "COMPROMISED",
       details: "Симуляция компрометации ECDSA. Фактическая проверка: " + (classic.ok ? "пройдена" : "отклонена") });
   }
   const postQuantum = await trace.check(6, "ERR_PQ_SIGNATURE_INVALID", () => {
-    requireTx(device, "ERR_PQ_SIGNATURE_INVALID");
     const signature = fromBase64(packet.pqSignatureBase64);
     requireTx(verify(signature, message, fromBase64(device.pqPublicKey)), "ERR_PQ_SIGNATURE_INVALID");
     return signature;
   });
   if (diff) return { ...failure("ERR_WYSIWYS_TAMPERED", trace.rows), tamperDiff: diff };
   if (!postQuantum.ok) return failure(postQuantum.code, trace.rows);
-  if (!classic.ok || !origin.ok || !device) return failure("ERR_WEBAUTHN_INVALID", trace.rows);
+  if (!classic.ok || !origin.ok) return failure("ERR_WEBAUTHN_INVALID", trace.rows);
 
   const gate = await trace.check(7, "ERR_TX_STATE", () => {
     requireTx(!simulation, "ERR_SIMULATION_ONLY");
-    requireTx(!isExpired(record, clock()), "ERR_TX_EXPIRED");
+    const signedAt = clock();
+    requireTx(!isExpired(record, signedAt), "ERR_TX_EXPIRED");
     const signature: SignatureBundle = {
-      signerUserId: device.userId, deviceId: device.id, signedAt: clock().toISOString(),
+      signerUserId: device.userId, deviceId: device.id, signedAt: signedAt.toISOString(),
       webAuthnCredentialId: device.credentialId, webAuthnClientDataJson: origin.value,
+      webAuthnPublicKey: device.webAuthnPublicKey, pqPublicKey: device.pqPublicKey,
       webAuthnSignatureBytesLength: fromBase64Url(assertion.response.signature).length,
       pqAlgorithm: "ML-DSA-65", pqSignatureHexPreview: bytesToHex(postQuantum.value.subarray(0, 32)),
       pqSignatureBytesLength: postQuantum.value.length, pqSignatureBase64: packet.pqSignatureBase64,
       verifyTimeMs: performance.now() - started,
     };
-    context.applyPolicy(record, signature);
+    requireTx(unit.consumeNonce(record.id, role), "ERR_REPLAY_DETECTED");
+    applyPolicy(signature);
     device.webAuthnCounter = classic.value.newCounter;
   });
   if (!gate.ok) return failure(gate.code, trace.rows);
@@ -157,9 +156,14 @@ async function verifyHybrid(context: VerificationContext, packet: SignedPacket, 
   return { ok: true as const, transaction: record, verificationTrace: trace.rows };
 }
 
-function enforceIndependentDevice(device: RegisteredDevice, first?: RegisteredDevice) {
-  requireTx(first && device.userId !== first.userId && device.credentialId !== first.credentialId &&
-    device.webAuthnPublicKey !== first.webAuthnPublicKey && device.pqPublicKey !== first.pqPublicKey, "ERR_COSIGNER");
+function enforceIndependentDevice(device: RegisteredDevice, first: SignatureBundle | undefined, devices: RegisteredDevice[]) {
+  requireTx(first, "ERR_TX_STATE");
+  // Older signature bundles may still need the original registration to identify both keys.
+  const original = devices.find(d => d.id === first.deviceId);
+  const webKey = first.webAuthnPublicKey ?? original?.webAuthnPublicKey;
+  const pqKey = first.pqPublicKey ?? original?.pqPublicKey;
+  requireTx(webKey && pqKey && device.userId !== first.signerUserId && device.credentialId !== first.webAuthnCredentialId &&
+    device.webAuthnPublicKey !== webKey && device.pqPublicKey !== pqKey, "ERR_COSIGNER");
 }
 
 export const verifyPrimary = (context: VerificationContext, packet: PrimaryPacket) =>

@@ -30,8 +30,7 @@ export function fromBase64Url(value: string) {
 
 export function serializeCanonicalJSON(value: unknown): string {
   const parents = new Set<object>();
-  function serialize(item: unknown, key?: string): string {
-    if (key === "amountTenge" && !Number.isSafeInteger(item)) throw new TypeError("Сумма должна быть целым числом");
+  function serialize(item: unknown): string {
     if (item === null || typeof item === "string" || typeof item === "boolean") return JSON.stringify(item);
     if (typeof item === "number" && Number.isFinite(item)) return JSON.stringify(item);
     if (typeof item !== "object" || item === null || parents.has(item)) throw new TypeError("Недопустимое значение JSON");
@@ -43,7 +42,7 @@ export function serializeCanonicalJSON(value: unknown): string {
       const prototype = Object.getPrototypeOf(item);
       if (prototype !== null && prototype !== Object.prototype) throw new TypeError("Ожидается объект JSON");
       const entries = Object.entries(item).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
-      result = "{" + entries.map(([name, entry]) => JSON.stringify(name) + ":" + serialize(entry, name)).join(",") + "}";
+      result = "{" + entries.map(([name, entry]) => JSON.stringify(name) + ":" + serialize(entry)).join(",") + "}";
     }
     parents.delete(item);
     return result;
@@ -67,7 +66,10 @@ export function computeTamperDiff(original: object, submitted: object): TamperDi
     const a: unknown = before.get(field);
     const b: unknown = after.get(field);
     if (a === undefined || b === undefined || serializeCanonicalJSON(a) !== serializeCanonicalJSON(b)) {
-      diff.push({ field, original: show(a), tampered: show(b) });
+      const original = show(a);
+      const tampered = show(b);
+      // Show a change of type even when both values have identical display text.
+      diff.push({ field, original, tampered: typeof b === "string" && original === tampered ? JSON.stringify(b) : tampered });
     }
   }
   return diff;

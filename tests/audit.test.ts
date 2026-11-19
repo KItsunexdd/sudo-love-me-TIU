@@ -9,7 +9,7 @@ import {
   fromBase64, hashPayload, serializeCanonicalJSON, sha256,
   toBase64, toBase64Url, utf8,
 } from "@/lib/crypto/canonical";
-import { cosignMessage, keygen, ML_DSA_BYTES, primaryMessage, sign, verify } from "@/lib/crypto/mldsa";
+import { cosignMessage, createPqProofOfPossession, keygen, ML_DSA_BYTES, primaryMessage, sign, verify } from "@/lib/crypto/mldsa";
 import { assertSoftware, registerSoftware, type SoftwareCredential } from "@/lib/crypto/software-authenticator";
 import { registrationOptions, verifyRegistration } from "@/lib/crypto/webauthn";
 import { assessRisk } from "@/lib/risk/engine";
@@ -61,6 +61,7 @@ async function enroll(userId: string, adapter: StorageAdapter = storage) {
     expectedChallenge: options.challenge,
     deviceName: "Audit Key",
     pqPublicKeyBase64: toBase64(pq.publicKey),
+    pqProofOfPossessionBase64: createPqProofOfPossession(user.id, response.id, options.challenge, pq.secretKey),
   });
   await adapter.transact(unit => { unit.db.devices.push(device); });
   return { device, credential, pq };
@@ -183,22 +184,29 @@ beforeEach(async () => {
 });
 
 describe("AUDIT-01: Регистрация ML-DSA-65, PoP и вырожденные ключи t1 = 0", () => {
-  it("подтверждает, что нулевой pqPublicKey позволяет подделать валидную ML-DSA-65 подпись без секретного ключа", () => {
+  it("подписывает согласованный домен и SHA-256 идентификаторов для PoP", () => {
+    const pq = keygen();
+    const proof = createPqProofOfPossession("usr_aigul", "AQID_-0", "AA_-CQ", pq.secretKey);
+    const bindingHash = hexToBytes("0c1970b5477c709b751e03c80e6f0881a0d060d82032140df64d0499f749fa3d");
+    const message = concatBytes(utf8("BCC-SAFESIGN-V1:PQ-POP:"), bindingHash);
+    expect(ml_dsa65.verify(fromBase64(proof), message, pq.publicKey)).toBe(true);
+  });
+  it("отклоняет вырожденный ключ даже для подписи, которую принимает примитив ML-DSA-65", () => {
     const zeroPk = new Uint8Array(ML_DSA_BYTES.publicKey);
     const msg = primaryMessage(sha256(utf8("arbitrary-payload")));
     const forged = forgeZeroPkSignature(msg, zeroPk);
-    expect(verify(forged, msg, zeroPk)).toBe(true);
+    expect(verify(forged, msg, zeroPk)).toBe(false);
     expect(ml_dsa65.verify(forged, msg, zeroPk)).toBe(true);
   });
 
-  // AUDIT-01: verifyRegistration принимает вырожденный нулевой ключ (t1 = 0) без PoP
-  it.fails("verifyRegistration должен отклонять вырожденный нулевой ключ ML-DSA-65 (t1 = 0)", async () => {
+  it.each([0, 1])("отклоняет вырожденный ключ с t1 = 0 независимо от seed (первый байт %i)", async seedByte => {
     const db = await storage.snapshot();
     const user = db.users[0];
     const options = await registrationOptions(user, db.devices);
     const { response } = await registerSoftware(options);
     const zeroPk = new Uint8Array(ML_DSA_BYTES.publicKey);
 
+    zeroPk[0] = seedByte;
     await expect(verifyRegistration({
       user,
       deviceName: "Zero Key Device",
@@ -206,44 +214,21 @@ describe("AUDIT-01: Регистрация ML-DSA-65, PoP и вырожденн�
       expectedChallenge: options.challenge,
       response,
       pqPublicKeyBase64: toBase64(zeroPk),
-    })).rejects.toThrow();
+      pqProofOfPossessionBase64: createPqProofOfPossession(user.id, response.id, options.challenge, keygen().secretKey),
+    })).rejects.toMatchObject({ code: "ERR_INVALID_INPUT" });
   });
 
-  it("демонстрирует прохождение execute с поддельной ML-DSA подписью, если на устройстве зарегистрирован нулевой ключ", async () => {
-    const db = await storage.snapshot();
-    const user = db.users[0];
-    const options = await registrationOptions(user, db.devices);
-    const { response, credential } = await registerSoftware(options);
-    const zeroPk = new Uint8Array(ML_DSA_BYTES.publicKey);
-    const device = await verifyRegistration({
-      user,
-      deviceName: "Zero PQ Key",
-      deviceKind: "SOFTWARE_FALLBACK",
-      expectedChallenge: options.challenge,
-      response,
-      pqPublicKeyBase64: toBase64(zeroPk),
+  it("блокирует исполнение со старой записью устройства с вырожденным ключом", async () => {
+    const { actor, packet } = await signPrimary();
+    await storage.transact(({ db }) => {
+      db.devices.find(device => device.id === actor.device.id)!.pqPublicKey = toBase64(new Uint8Array(ML_DSA_BYTES.publicKey));
     });
-    await storage.transact(unit => { unit.db.devices.push(device); });
-
-    const prepared = mustOk(await service.prepare(lowInput));
-    const assertion = await assertSoftware(credential, prepared.webAuthnOptions);
-    const forgedPqSig = forgeZeroPkSignature(primaryMessage(hexToBytes(prepared.txHashHex)), zeroPk);
-
-    const executed = await service.execute({
-      txId: prepared.txId,
-      deviceId: device.id,
-      submittedPayload: prepared.payload,
-      webAuthnAssertion: assertion,
-      pqSignatureBase64: toBase64(forgedPqSig),
-    });
-    expect(executed.status).toBe("EXECUTED");
+    expect(await service.execute(packet)).toMatchObject({ status: "REJECTED_CRYPTO", failureCode: "ERR_PQ_SIGNATURE_INVALID" });
   });
 });
 
 describe("AUDIT-02: Pre-Auth сжигание nonce и состояние транзакции", () => {
-  // AUDIT-02: чужой deviceId при cosignSubmit сжигает cosignNonceUsed и переводит TX в REJECTED_CRYPTO,
-  // блокируя легитимный cosignReject + coolingOffUntil
-  it.fails("попытка cosignSubmit с чужим deviceId не должна блокировать доверенному лицу cosignReject и cooling-off", async () => {
+  it("попытка cosignSubmit с чужим deviceId не должна блокировать доверенному лицу cosignReject и cooling-off", async () => {
     const { actor: initiator, prepared } = await createPendingCosign();
     const intruder = await enroll("usr_timur");
 
@@ -254,7 +239,8 @@ describe("AUDIT-02: Pre-Auth сжигание nonce и состояние тра
       webAuthnAssertion: await assertSoftware(initiator.credential, prepared.webAuthnOptions),
       pqSignatureBase64: toBase64(new Uint8Array(ML_DSA_BYTES.signature)),
     });
-    expect(badCosign.ok).toBe(false);
+    expect(badCosign).toMatchObject({ status: "ERROR", failureCode: "ERR_COSIGNER" });
+    expect((await storage.snapshot()).transactions[0]).toMatchObject({ status: "PENDING_COSIGN", cosignNonceUsed: false });
 
     // Реальный cosigner (Арман) должен всё ещё иметь возможность заблокировать скам и включить cooling-off
     const rejected = await service.cosignReject({
@@ -265,16 +251,19 @@ describe("AUDIT-02: Pre-Auth сжигание nonce и состояние тра
   });
 
   // AUDIT-02: отказ по ERR_ACK_REQUIRED не должен навсегда помечать валидную подпись как REJECTED_CRYPTO
-  it.fails("отказ по чекбоксу MEDIUM (ERR_ACK_REQUIRED) не должен сжигать nonce и закрывать TX в REJECTED_CRYPTO", async () => {
+  it("отказ по чекбоксу MEDIUM (ERR_ACK_REQUIRED) не должен сжигать nonce и закрывать TX в REJECTED_CRYPTO", async () => {
     const { packet } = await signPrimary(mediumInput);
     const first = await service.execute({ ...packet, acknowledgedWarning: false });
     expect(first).toMatchObject({ ok: false, failureCode: "ERR_ACK_REQUIRED" });
 
     const snap = await storage.snapshot();
-    expect(snap.transactions[0].status).toBe("CHALLENGE_ISSUED");
+    expect(snap.transactions[0]).toMatchObject({ status: "CHALLENGE_ISSUED", nonceUsed: false });
 
     const retry = await service.execute({ ...packet, acknowledgedWarning: true });
     expect(retry.status).toBe("EXECUTED");
+    const replay = await service.execute(packet);
+    expect(replay).toMatchObject({ failureCode: "ERR_REPLAY_DETECTED" });
+    expect(replay.verificationTrace[1]).toMatchObject({ code: "REPLAY_PROTECTION", outcome: "FAIL" });
   });
 
   it("не позволяет инициатору сделать cosign самому себе или подписать за другого пользователя", async () => {
@@ -399,7 +388,7 @@ describe("AUDIT-03: Атомарность nonce и параллельный rep
 
 describe("AUDIT-04 / AUDIT-05 / AUDIT-06: Каноническая сериализация и валидация ввода", () => {
   it("отклоняет в prepare отрицательную, нулевую, -0, нецелую сумму, MAX_SAFE_INTEGER+1 и огромный purpose", async () => {
-    for (const amountTenge of [-15_000, -1, 0, -0, 15_000.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1]) {
+    for (const amountTenge of [-15_000, -1, 0, -0, 15_000.5, "15000", Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1]) {
       const res = await service.prepare({ ...lowInput, amountTenge });
       expect(res).toMatchObject({ ok: false, failureCode: "ERR_INVALID_INPUT" });
     }
@@ -414,8 +403,7 @@ describe("AUDIT-04 / AUDIT-05 / AUDIT-06: Каноническая сериал�
     expect(serializeCanonicalJSON(protoObj)).toBe('{"__proto__":{"admin":true},"a":1}');
   });
 
-  // AUDIT-04: executeSchema принимает неограниченную строку purpose и глубокую вложенность в submittedPayload
-  it.fails("executeSchema должен ограничивать размер строк и глубину вложенности в submittedPayload", async () => {
+  it("executeSchema должен ограничивать размер строк и глубину вложенности в submittedPayload", async () => {
     const { packet } = await signPrimary();
     const huge = executeSchema.safeParse({
       ...packet,
@@ -430,30 +418,49 @@ describe("AUDIT-04 / AUDIT-05 / AUDIT-06: Каноническая сериал�
       submittedPayload: { ...packet.submittedPayload, extra: deep },
     });
     expect(nested.success).toBe(false);
+    expect(executeSchema.safeParse({ ...packet, pqSignatureBase64: "A".repeat(6001) }).success).toBe(false);
+    for (const field of ["clientDataJSON", "authenticatorData"]) {
+      const assertion = packet.webAuthnAssertion;
+      expect(executeSchema.safeParse({ ...packet, webAuthnAssertion: {
+        ...assertion, response: { ...assertion.response, [field]: "A".repeat(8193) },
+      } }).success).toBe(false);
+    }
+    expect(await service.execute({ ...packet, submittedPayload: { ...packet.submittedPayload, recipientName: "я".repeat(121) } }))
+      .toMatchObject({ status: "ERROR", failureCode: "ERR_INVALID_INPUT" });
+    expect((await service.execute(packet)).status).toBe("EXECUTED");
   });
 
-  // AUDIT-05: нецелое/строковое amountTenge в submittedPayload маскирует MITM под ERR_INVALID_INPUT вместо ERR_WYSIWYS_TAMPERED
-  it.fails("MITM-подмена amountTenge на дробное или строковое значение должна возвращать ERR_WYSIWYS_TAMPERED с tamperDiff", async () => {
+  it.each([[15_000.5, "15000.5"], ["18000", "18000"], ["15000", '"15000"']])("показывает изменение суммы на %j в tamperDiff", async (amountTenge, displayed) => {
     const { packet } = await signPrimary();
     const res = await service.execute({
       ...packet,
-      submittedPayload: { ...packet.submittedPayload, amountTenge: 15_000.5 },
+      submittedPayload: { ...packet.submittedPayload, amountTenge },
     });
     expect(res).toMatchObject({
       ok: false,
       failureCode: "ERR_WYSIWYS_TAMPERED",
-      tamperDiff: [{ field: "amountTenge", original: "15000", tampered: "15000.5" }],
+      tamperDiff: [{ field: "amountTenge", original: "15000", tampered: displayed }],
     });
+    expect(res.verificationTrace[2]).toMatchObject({ code: "WYSIWYS_INTEGRITY", outcome: "FAIL" });
+    expect((await storage.snapshot()).transactions[0]).toMatchObject({ status: "REJECTED_CRYPTO", nonceUsed: true });
   });
 
   // AUDIT-06: Bidi-управление (RLO) и zero-width символы в WYSIWYS-полях
-  it.fails("prepare должен отклонять Bidi-переопределение (U+202E) и невидимые символы в recipientName/purpose", async () => {
+  it("prepare должен отклонять Bidi-переопределение (U+202E) и невидимые символы в recipientName/purpose", async () => {
     const res = await service.prepare({
       ...lowInput,
       recipientName: "Арман \u202E000051",
       purpose: "Перевод\u200B",
     });
     expect(res).toMatchObject({ ok: false, failureCode: "ERR_INVALID_INPUT" });
+  });
+
+  it("нормализует реквизиты в NFC до хеширования и сохраняет подписанное написание при проверке", async () => {
+    const { packet, prepared } = await signPrimary({ ...lowInput, recipientName: "И\u0306", purpose: "Пае\u0308к" });
+    expect(prepared.payload).toMatchObject({ recipientName: "Й", purpose: "Паёк" });
+    expect(hashPayload(prepared.payload).txHashHex).toBe(prepared.txHashHex);
+    expect(await service.execute({ ...packet, submittedPayload: { ...packet.submittedPayload, recipientName: "И\u0306" } }))
+      .toMatchObject({ failureCode: "ERR_WYSIWYS_TAMPERED" });
   });
 });
 
@@ -531,7 +538,7 @@ describe("WebAuthn Origin, UV, SignCount, challenge из присланного 
   });
 
   // AUDIT-09: crossOrigin: true при отсутствии topOrigin принимается библиотекой
-  it.fails("должен отклонять WebAuthn assertion с crossOrigin: true", async () => {
+  it("должен отклонять WebAuthn assertion с crossOrigin: true", async () => {
     const { actor, prepared, packet } = await signPrimary();
     packet.webAuthnAssertion = await resignSoftwareAssertion(
       actor.credential,
@@ -540,6 +547,12 @@ describe("WebAuthn Origin, UV, SignCount, challenge из присланного 
     );
     const res = await service.execute(packet);
     expect(res).toMatchObject({ ok: false, failureCode: "ERR_ORIGIN_MISMATCH" });
+  });
+
+  it("сверяет непустой userHandle с идентификатором зарегистрированного пользователя", async () => {
+    const { packet } = await signPrimary();
+    packet.webAuthnAssertion.response.userHandle = toBase64Url(utf8("usr_arman"));
+    expect(await service.execute(packet)).toMatchObject({ failureCode: "ERR_WEBAUTHN_INVALID" });
   });
 
   it("квантовая атака №6 честно проверяет ML-DSA-65 даже при quantumSimulation: true", async () => {
@@ -566,6 +579,17 @@ describe("WebAuthn Origin, UV, SignCount, challenge из присланного 
 });
 
 describe("TTL, машина состояний §5.3, Risk Engine §5.1–5.2 и деньги", () => {
+  it("считает повреждённый и отсутствующий срок истёкшим", async () => {
+    const first = await signPrimary();
+    const pending = await createPendingCosign();
+    await storage.transact(({ db }) => {
+      db.transactions.find(t => t.id === first.packet.txId)!.payload.expiresAt = "повреждённая дата";
+      delete db.transactions.find(t => t.id === pending.packet.txId)!.cosignExpiresAt;
+    });
+    expect(await service.execute(first.packet)).toMatchObject({ status: "EXPIRED", failureCode: "ERR_TX_EXPIRED" });
+    expect(await service.cosignPrepare({ txId: pending.packet.txId, cosignerUserId: "usr_arman" }))
+      .toMatchObject({ status: "EXPIRED", failureCode: "ERR_TX_EXPIRED" });
+  });
   it("блокирует подпись ровно в expiresAt и после expiresAt, а также после cosignExpiresAt", async () => {
     const p1 = await signPrimary();
     nowMs += PRIMARY_TTL; // точная граница expiresAt
@@ -656,7 +680,7 @@ describe("TTL, машина состояний §5.3, Risk Engine §5.1–5.2 и
     expect((await service.prepare(lowInput)).ok).toBe(true);
   });
 
-  it("подтверждает точные веса Risk Engine и фиксирует обход Co-Sign для ONLINE_LOAN < 200 000 ₸ доверенному получателю", () => {
+  it("сохраняет вес 55 и требует Co-Sign для ONLINE_LOAN < 200 000 ₸ доверенному получателю", () => {
     const db = storage.snapshot();
     return db.then(snap => {
       const aigul = snap.users[0];
@@ -667,13 +691,13 @@ describe("TTL, машина состояний §5.3, Risk Engine §5.1–5.2 и
         new Date("2026-04-01T07:00:00Z"),
       );
       expect(r.score).toBe(55);
-      expect(r.level).toBe("MEDIUM");
-      expect(r.requiresCoSign).toBe(false);
+      expect(r.level).toBe("HIGH");
+      expect(r.requiresCoSign).toBe(true);
+      expect(r.reasons).toContain("Политика банка: закрытие депозита / кредит подтверждает доверенное лицо");
     });
   });
 
-  // AUDIT-10: service.preview выбрасывает необработанный ZodError вместо Failure
-  it.fails("service.preview при невалидном вводе должен возвращать структурированный Failure без исключения", async () => {
+  it("service.preview при невалидном вводе должен возвращать структурированный Failure без исключения", async () => {
     const res = await service.preview({ bad: true });
     expect(res).toMatchObject({ ok: false, failureCode: "ERR_INVALID_INPUT" });
   });

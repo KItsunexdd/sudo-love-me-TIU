@@ -12,6 +12,11 @@ const almatyHour = new Intl.DateTimeFormat("en-GB", {
 });
 export const riskLevel = (score: number): RiskLevel => score >= 60 ? "HIGH" : score >= 40 ? "MEDIUM" : "LOW";
 
+export const bankCoSignReason = "Политика банка: закрытие депозита / кредит подтверждает доверенное лицо";
+export function requiresBankCoSign({ mode, operationType }: Pick<RiskInput, "mode" | "operationType">) {
+  return mode === "B2C" && (operationType === "DEPOSIT_CLOSE" || operationType === "ONLINE_LOAN");
+}
+
 export function assessRisk(input: RiskInput, sender: User, blacklist: string[], now = new Date()) {
   const { amountTenge, recipientAccount, mode, operationType, simulatedContext } = input;
   const rules: Array<[code: string, active: boolean, weight: number, reason: string]> = [
@@ -30,7 +35,10 @@ export function assessRisk(input: RiskInput, sender: User, blacklist: string[], 
   ];
   const hits = rules.filter(([, active]) => active);
   const score = Math.min(100, Math.max(0, hits.reduce((sum, [, , weight]) => sum + weight, 0)));
-  const level = riskLevel(score);
+  const bankCoSign = requiresBankCoSign(input);
+  const level = bankCoSign ? "HIGH" : riskLevel(score);
+  const reasons = hits.map(([, , , reason]) => reason);
+  if (bankCoSign) reasons.push(bankCoSignReason);
   return { score, level, requiresCoSign: level === "HIGH", requiresAcknowledgement: level === "MEDIUM",
-    reasons: hits.map(([, , , reason]) => reason), codes: hits.map(([code]) => code) };
+    reasons, codes: hits.map(([code]) => code) };
 }
