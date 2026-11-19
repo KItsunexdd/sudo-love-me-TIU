@@ -9,3 +9,4 @@ data/store.json
 *.log
 .vercel
 next-env.d.ts
+*.tsbuildinfo
