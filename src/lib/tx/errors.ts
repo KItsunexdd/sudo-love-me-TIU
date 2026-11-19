@@ -1,4 +1,5 @@
 import { failureMessages, type FailureCode, type TamperDiff, type VerificationStepResult } from "@/lib/db/types";
+import { ZodError } from "zod";
 
 export class TxError extends Error {
   constructor(readonly code: FailureCode) { super(failureMessages[code]); }
@@ -19,4 +20,10 @@ export interface Failure {
 export function failure(code: FailureCode, trace: VerificationStepResult[] = []): Failure {
   return { ok: false, status: code === "ERR_TX_EXPIRED" ? "EXPIRED" : trace.length ? "REJECTED_CRYPTO" : "ERROR",
     failureCode: code, message: failureMessages[code], verificationTrace: trace };
+}
+
+export function failureFrom(error: unknown): Failure {
+  if (error instanceof TxError) return failure(error.code);
+  if (error instanceof ZodError) return failure("ERR_INVALID_INPUT");
+  return failure("ERR_STORAGE");
 }

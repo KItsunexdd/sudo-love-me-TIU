@@ -142,10 +142,13 @@ export interface SecurityEvent {
   actorName: string;
   amountTenge?: number;
   summary: string;
-  technicalDetails: Record<string, unknown>;
+  technicalDetails: Record<string, unknown> & { verificationTrace?: VerificationStepResult[]; tamperDiff?: TamperDiff };
 }
 
 export interface Database {
+  registrationChallenges?: {
+    challenge: string; userId: string; deviceName: string; deviceKind?: DeviceKind; expiresAt: number;
+  }[];
   users: User[];
   devices: RegisteredDevice[];
   transactions: TransactionRecord[];

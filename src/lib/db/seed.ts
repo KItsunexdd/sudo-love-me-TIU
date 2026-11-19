@@ -10,11 +10,12 @@ export const recipientPresets = {
 export function createSeed(): Database {
   const { son, supplier } = recipientPresets;
   return {
-    blacklist: [DROP_ACCOUNT], transactions: [], devices: [], securityEvents: [],
+    blacklist: [DROP_ACCOUNT], transactions: [], devices: [], securityEvents: [], registrationChallenges: [],
     users: [
       {
         id: "usr_aigul", fullName: "Айгуль Сатыбалдиева", role: "CLIENT_B2C",
-        phone: "+77000000001", accountIban: "KZ868560000004512890", balanceTenge: 450_000,
+        // Отклонение от §6.2: текущий счёт покрывает одобрение перевода на 850 000 ₸ без закрытия депозита.
+        phone: "+77000000001", accountIban: "KZ868560000004512890", balanceTenge: 1_200_000,
         depositBalanceTenge: 2_500_000, linkedCosignerId: "usr_arman",
         trustedRecipients: [
           { recipientName: son.recipientName, recipientAccount: son.recipientAccount },

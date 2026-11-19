@@ -6,6 +6,8 @@ import type {
 } from "@/lib/db/types";
 import { failureMessages } from "@/lib/db/types";
 import { failure, requireTx, TxError } from "@/lib/tx/errors";
+import type { z } from "zod";
+import type { executeSchema } from "@/lib/tx/inputs";
 import { bytesToHex, computeTamperDiff, fromBase64, fromBase64Url, hashPayload, sha256, toBase64Url, utf8 } from "./canonical";
 import { cosignMessage, primaryMessage, verify } from "./mldsa";
 import { relyingParty, verifyAuthentication } from "./webauthn";
@@ -17,13 +19,10 @@ export interface SignedPacket {
   pqSignatureBase64: string;
   submittedPayload?: object;
 }
-export interface PrimaryPacket extends SignedPacket {
-  submittedPayload: object;
-  acknowledgedWarning?: boolean;
-  quantumSimulation?: boolean;
-}
+export type PrimaryPacket = z.infer<typeof executeSchema>;
 export interface VerificationContext {
   unit: UnitOfWork;
+  requestOrigin?: string;
   clock(): Date;
   applyPolicy(tx: TransactionRecord, signature: SignatureBundle): void;
 }
@@ -109,7 +108,8 @@ async function verifyHybrid(context: VerificationContext, packet: SignedPacket, 
   const origin = await trace.check(4, "ERR_ORIGIN_MISMATCH", () => {
     const json = new TextDecoder().decode(fromBase64Url(assertion.response.clientDataJSON));
     const data = JSON.parse(json);
-    requireTx(data.origin === expectedOrigin && record.payload.rpId === rpId, "ERR_ORIGIN_MISMATCH");
+    const requestOrigin = context.requestOrigin ?? expectedOrigin;
+    requireTx(requestOrigin === expectedOrigin && data.origin === requestOrigin && record.payload.rpId === rpId, "ERR_ORIGIN_MISMATCH");
     const authData = fromBase64Url(assertion.response.authenticatorData);
     requireTx(authData.length >= 37 && bytesToHex(authData.subarray(0, 32)) === bytesToHex(sha256(utf8(rpId))), "ERR_ORIGIN_MISMATCH");
     return json;

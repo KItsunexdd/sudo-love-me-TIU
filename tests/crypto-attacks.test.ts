@@ -115,7 +115,7 @@ describe("Гибридная проверка и атомарное исполн
     expect(result.verificationTrace.every(step => step.durationMs >= 0)).toBe(true);
     const db = await storage.snapshot();
     expect(db.devices[0].webAuthnCounter).toBe(1);
-    expect(db.users.slice(0, 2).map(u => u.balanceTenge)).toEqual([435_000, 15_000]);
+    expect(db.users.slice(0, 2).map(u => u.balanceTenge)).toEqual([1_185_000, 15_000]);
   });
   it.each([
     ["amountTenge", 500_000, "15000"], ["recipientAccount", recipientPresets.unknown.recipientAccount, low.recipientAccount],
@@ -127,7 +127,7 @@ describe("Гибридная проверка и атомарное исполн
       tamperDiff: [{ field, original, tampered: String(changed) }] });
     expect(result.verificationTrace.map(s => s.outcome)).toEqual(["PASS", "PASS", "FAIL", "PASS", "FAIL", "FAIL", "SKIPPED"]);
     const db = await storage.snapshot();
-    expect(db.users[0].balanceTenge).toBe(450_000);
+    expect(db.users[0].balanceTenge).toBe(1_200_000);
     expect(db.securityEvents.at(-1)?.eventType).toBe("ATTACK_MITM_BLOCKED");
   });
   it("повторные и одновременные пакеты дают одно списание и сохраняют квитанцию", async () => {
@@ -138,7 +138,7 @@ describe("Гибридная проверка и атомарное исполн
     expect(await service.execute(packet)).toMatchObject({ failureCode: "ERR_REPLAY_DETECTED" });
     const db = await storage.snapshot();
     expect(db.transactions[0].status).toBe("EXECUTED");
-    expect(db.users[0].balanceTenge).toBe(435_000);
+    expect(db.users[0].balanceTenge).toBe(1_185_000);
     expect(db.securityEvents.filter(e => e.eventType === "ATTACK_REPLAY_BLOCKED")).toHaveLength(3);
   });
   it.each(["origin", "rpIdHash"])("отклоняет чужой %s на четвёртом шаге", async field => {
@@ -183,7 +183,7 @@ describe("Гибридная проверка и атомарное исполн
   it("диагностический режим с подлинными ключами исключает списание", async () => {
     const { packet } = await preparePrimary();
     expect(await service.execute({ ...packet, quantumSimulation: true })).toMatchObject({ failureCode: "ERR_SIMULATION_ONLY" });
-    expect((await storage.snapshot()).users[0].balanceTenge).toBe(450_000);
+    expect((await storage.snapshot()).users[0].balanceTenge).toBe(1_200_000);
   });
   it("проверяет точную границу TTL и отсутствующий txId", async () => {
     const { packet } = await preparePrimary();
@@ -201,14 +201,15 @@ describe("Гибридная проверка и атомарное исполн
 });
 
 describe("Вторая рука", () => {
-  it("связывает две гибридные подписи для 850 000 ₸ и допускает только одно исполнение", async () => {
-    // Fund the current account from the seeded deposit through the same two-signature service.
+  it("закрывает часть депозита после двух подписей", async () => {
     const withdrawal = await preparePrimary({ ...low, operationType: "DEPOSIT_CLOSE", amountTenge: 450_000,
       recipientAccount: "KZ868560000004512890", recipientName: "Айгуль Сатыбалдиева" });
     expect(await service.execute(withdrawal.packet)).toMatchObject({ status: "PENDING_COSIGN" });
     const release = await secondSignature(withdrawal.tx.txId);
     expect(await service.cosignSubmit(release.packet)).toMatchObject({ status: "EXECUTED" });
-    expect((await storage.snapshot()).users[0]).toMatchObject({ balanceTenge: 900_000, depositBalanceTenge: 2_050_000 });
+    expect((await storage.snapshot()).users[0]).toMatchObject({ balanceTenge: 1_650_000, depositBalanceTenge: 2_050_000 });
+  });
+  it("связывает две гибридные подписи для 850 000 ₸ и допускает только одно исполнение", async () => {
     const { tx, packet: primary, pending } = await pendingHigh();
     expect(pending.transaction.riskScore).toBe(100);
     time += PRIMARY_TTL + 1;
@@ -218,13 +219,16 @@ describe("Вторая рука", () => {
     expect(result.transaction.cosignSignature?.pqSignatureBase64).toBe(packet.pqSignatureBase64);
     expect(result.transaction.cosignSignature?.signerUserId).toBe("usr_arman");
     expect(await service.cosignSubmit(packet)).toMatchObject({ failureCode: "ERR_REPLAY_DETECTED" });
-    expect((await storage.snapshot()).users[0].balanceTenge).toBe(50_000);
+    expect((await storage.snapshot()).users[0].balanceTenge).toBe(350_000);
   });
-  it("при исходных 450 000 ₸ вторая подпись не создаёт овердрафт", async () => {
+  it("повторно проверяет остаток при списании после одобрения другой операции", async () => {
     const { tx } = await pendingHigh();
+    const other = await pendingHigh();
+    const approval = await secondSignature(other.tx.txId);
+    expect(await service.cosignSubmit(approval.packet)).toMatchObject({ status: "EXECUTED" });
     const { packet } = await secondSignature(tx.txId);
     expect(await service.cosignSubmit(packet)).toMatchObject({ failureCode: "ERR_INSUFFICIENT_FUNDS" });
-    expect((await storage.snapshot()).users[0].balanceTenge).toBe(450_000);
+    expect((await storage.snapshot()).users[0].balanceTenge).toBe(350_000);
   });
   it("отклоняет ML-DSA второй подписи с доменом PRIMARY", async () => {
     const { tx } = await pendingHigh();
@@ -244,7 +248,7 @@ describe("Вторая рука", () => {
         status: "BLOCKED_BY_COSIGNER", savedAmountTenge: 850_000, coolingOffActive: true,
       });
       expect(await service.prepare(low)).toMatchObject({ failureCode: "ERR_COOLING_OFF" });
-      expect((await storage.snapshot()).users[0]).toMatchObject({ balanceTenge: 450_000, depositBalanceTenge: 2_500_000 });
+      expect((await storage.snapshot()).users[0]).toMatchObject({ balanceTenge: 1_200_000, depositBalanceTenge: 2_500_000 });
       expect(events).toContainEqual({ type: "COSIGN_REQUESTED", txId: tx.txId, cosignerUserId: "usr_arman" });
       expect(events).toContainEqual(expect.objectContaining({ type: "SECURITY_ALERT",
         event: expect.objectContaining({ eventType: "SOCENG_STOPPED_BY_COSIGNER" }) }));
@@ -284,7 +288,7 @@ it("сброс с сохранением устройств восстанавл
   await storage.resetDemo({ keepDevices: true });
   const db = await storage.snapshot();
   expect(db.devices[0]).toMatchObject({ id: actor.device.id, webAuthnCounter: 1 });
-  expect(db.users[0].balanceTenge).toBe(450_000);
+  expect(db.users[0].balanceTenge).toBe(1_200_000);
   expect([db.transactions.length, db.securityEvents.length]).toEqual([0, 0]);
   const next = success(await service.prepare(low));
   expect(success(await service.execute({ txId: next.txId, deviceId: actor.device.id,
@@ -300,7 +304,7 @@ it("учитывает период охлаждения для ранее по�
   const { tx } = await pendingHigh();
   success(await service.cosignReject({ txId: tx.txId, cosignerUserId: "usr_arman" }));
   expect(await service.execute(prepared.packet)).toMatchObject({ failureCode: "ERR_COOLING_OFF" });
-  expect((await storage.snapshot()).users[0].balanceTenge).toBe(450_000);
+  expect((await storage.snapshot()).users[0].balanceTenge).toBe(1_200_000);
 });
 
 it("ограничивает регистрацию выданным challenge и ключом ML-DSA-65", async () => {
@@ -317,7 +321,7 @@ it("заём зачисляется подписанному получател�
   const { packet } = await preparePrimary({ ...low, operationType: "ONLINE_LOAN" });
   expect(await service.execute({ ...packet, acknowledgedWarning: true })).toMatchObject({ status: "EXECUTED" });
   const [borrower, recipient] = (await storage.snapshot()).users;
-  expect(borrower).toMatchObject({ balanceTenge: 450_000, loanBalanceTenge: 15_000 });
+  expect(borrower).toMatchObject({ balanceTenge: 1_200_000, loanBalanceTenge: 15_000 });
   expect(recipient.balanceTenge).toBe(15_000);
 });
 

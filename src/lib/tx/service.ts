@@ -1,15 +1,15 @@
-import { z } from "zod";
+import type { z } from "zod";
 import { hexToBytes, randomBytes } from "@noble/hashes/utils.js";
 import { bytesToHex, fromBase64, hashPayload, sha256 } from "@/lib/crypto/canonical";
 import { cosignChallenge } from "@/lib/crypto/mldsa";
 import { authenticationOptions, relyingParty } from "@/lib/crypto/webauthn";
 import { isExpired, verifyCosign, verifyPrimary, type PrimaryPacket, type SignedPacket } from "@/lib/crypto/hybrid-verifier";
 import { getStorage, type StorageAdapter, type UnitOfWork } from "@/lib/db/store";
-import { failureMessages, type CanonicalTxPayload, type FailureCode, type SecurityEvent,
-  type SignatureBundle, type TransactionRecord, type User } from "@/lib/db/types";
+import { failureMessages, type CanonicalTxPayload, type Database, type FailureCode, type SecurityEvent,
+  type SignatureBundle, type TransactionRecord, type TxStatus, type User } from "@/lib/db/types";
 import { assessRisk } from "@/lib/risk/engine";
-import { failure, requireTx, TxError, type Failure } from "./errors";
-import { prepareSchema, cosignerSchema, cosignSubmitSchema, executeSchema, rejectSchema } from "./inputs";
+import { failure, failureFrom, requireTx, type Failure } from "./errors";
+import { prepareSchema, riskPreviewSchema, cosignerSchema, cosignSubmitSchema, executeSchema, rejectSchema } from "./inputs";
 
 const MINUTE = 60_000;
 export const PRIMARY_TTL = 5 * MINUTE;
@@ -22,26 +22,28 @@ function checkCoolingOff(sender: User, now: Date) {
 
 function updated(unit: UnitOfWork, tx: TransactionRecord, now: Date) {
   tx.updatedAt = now.toISOString();
-  unit.emit({ type: "TX_UPDATED", txId: tx.id, status: tx.status });
+  unit.emit({ type: "TX_UPDATED", txId: tx.id, status: tx.status, senderId: tx.payload.senderId, cosignerUserId: tx.cosignerUserId });
 }
 
-function audit(unit: UnitOfWork, tx: TransactionRecord, now: Date, type: SecurityEvent["eventType"],
-  severity: SecurityEvent["severity"], summary: string, details: Record<string, unknown> = {}, actorId = tx.payload.senderId) {
+interface AuditTransaction { id: string; payload?: CanonicalTxPayload; cosignerUserId?: string }
+function audit(unit: UnitOfWork, tx: AuditTransaction,
+  now: Date, type: SecurityEvent["eventType"], severity: SecurityEvent["severity"], summary: string,
+  details: SecurityEvent["technicalDetails"] = {}, actorId = tx.payload?.senderId) {
   const event: SecurityEvent = {
     id: "evt_" + crypto.randomUUID(), timestamp: now.toISOString(), severity, eventType: type, txId: tx.id,
-    actorName: unit.db.users.find(u => u.id === actorId)?.fullName ?? actorId,
-    amountTenge: tx.payload.amountTenge, summary, technicalDetails: details,
+    actorName: unit.db.users.find(u => u.id === actorId)?.fullName ?? actorId ?? "Неизвестный пользователь",
+    amountTenge: tx.payload?.amountTenge, summary, technicalDetails: details,
   };
   unit.db.securityEvents.push(event);
-  if (severity !== "INFO") unit.emit({ type: "SECURITY_ALERT", event });
+  if (severity !== "INFO") unit.emit({ type: "SECURITY_ALERT", event, senderId: tx.payload?.senderId, cosignerUserId: tx.cosignerUserId });
 }
 
-function expire(unit: UnitOfWork, tx: TransactionRecord, now: Date) {
+function expire(unit: UnitOfWork, tx: TransactionRecord, now: Date, details: SecurityEvent["technicalDetails"] = {}) {
   if (tx.status === "EXPIRED") return;
   tx.status = "EXPIRED";
   tx.failureCode = "ERR_TX_EXPIRED";
   updated(unit, tx, now);
-  audit(unit, tx, now, "TX_EXPIRED", "WARNING", failureMessages.ERR_TX_EXPIRED);
+  audit(unit, tx, now, "TX_EXPIRED", "WARNING", failureMessages.ERR_TX_EXPIRED, details);
 }
 
 function pending(unit: UnitOfWork, txId: string, cosignerUserId: string, now: Date) {
@@ -56,12 +58,17 @@ function pending(unit: UnitOfWork, txId: string, cosignerUserId: string, now: Da
   return { ok: true as const, tx, primary: tx.primarySignature };
 }
 
+function fundingSource(sender: User, { operationType, amountTenge }: Pick<CanonicalTxPayload, "operationType" | "amountTenge">) {
+  const source = operationType === "DEPOSIT_CLOSE" ? "depositBalanceTenge" : "balanceTenge";
+  if (operationType !== "ONLINE_LOAN") requireTx(sender[source] >= amountTenge, "ERR_INSUFFICIENT_FUNDS");
+  return source;
+}
+
 function settle(unit: UnitOfWork, tx: TransactionRecord, sender: User) {
   const { amountTenge, recipientAccount, operationType } = tx.payload;
   const recipient = unit.db.users.find(u => u.accountIban === recipientAccount);
-  const source = operationType === "DEPOSIT_CLOSE" ? "depositBalanceTenge" : "balanceTenge";
+  const source = fundingSource(sender, tx.payload);
   const loan = operationType === "ONLINE_LOAN";
-  if (!loan) requireTx(sender[source] >= amountTenge, "ERR_INSUFFICIENT_FUNDS");
   const proceeds = recipient === sender && source === "balanceTenge" && !loan ? 0 : amountTenge;
   if (recipient) requireTx(Number.isSafeInteger(recipient.balanceTenge + proceeds), "ERR_INVALID_INPUT");
   if (loan) requireTx(Number.isSafeInteger((sender.loanBalanceTenge ?? 0) + amountTenge), "ERR_INVALID_INPUT");
@@ -78,10 +85,11 @@ const alertType: Partial<Record<FailureCode, SecurityEvent["eventType"]>> = {
   ERR_WEBAUTHN_INVALID: "WEBAUTHN_REJECTED",
 };
 
-function recordFailure(unit: UnitOfWork, tx: TransactionRecord, result: Failure, now: Date) {
-  if (result.failureCode === "ERR_TX_EXPIRED") {
-    if (tx.status !== "EXPIRED") tx.verificationTrace = result.verificationTrace;
-    expire(unit, tx, now);
+function recordFailure(unit: UnitOfWork, tx: TransactionRecord, result: Failure, now: Date, details: Record<string, unknown>) {
+  const rejection = { ...details, failureCode: result.failureCode, verificationTrace: result.verificationTrace, tamperDiff: result.tamperDiff };
+  if (result.failureCode === "ERR_TX_EXPIRED" && tx.status !== "EXPIRED") {
+    tx.verificationTrace = result.verificationTrace;
+    expire(unit, tx, now, rejection);
     return;
   }
   // Only the attempt which actually claimed this role's nonce may close its transaction.
@@ -92,8 +100,16 @@ function recordFailure(unit: UnitOfWork, tx: TransactionRecord, result: Failure,
     tx.status = "REJECTED_CRYPTO";
     updated(unit, tx, now);
   }
-  audit(unit, tx, now, alertType[result.failureCode] ?? "TX_POLICY_REJECTED", "WARNING", result.message,
-    { failureCode: result.failureCode, verificationTrace: result.verificationTrace, tamperDiff: result.tamperDiff });
+  audit(unit, tx, now, alertType[result.failureCode] ?? "TX_POLICY_REJECTED", "WARNING", result.message, rejection);
+}
+
+function assessRequest(input: z.infer<typeof riskPreviewSchema>, db: Database, now: Date) {
+  const sender = db.users.find(u => u.id === input.senderId);
+  requireTx(sender, "ERR_USER_NOT_FOUND");
+  const b2b = input.mode === "B2B";
+  requireTx(sender.role === (b2b ? "ACCOUNTANT_B2B" : "CLIENT_B2C") &&
+    b2b === (input.operationType === "B2B_INVOICE"), "ERR_INVALID_INPUT");
+  return { sender, risk: assessRisk(input, sender, db.blacklist, now) };
 }
 
 export class TransactionService {
@@ -103,26 +119,27 @@ export class TransactionService {
     try {
       return await this.storage.transact(action);
     } catch (error) {
-      if (error instanceof TxError) return failure(error.code);
-      if (error instanceof z.ZodError) return failure("ERR_INVALID_INPUT");
-      return failure("ERR_STORAGE");
+      return failureFrom(error);
     }
   }
 
+  async preview(request: unknown) {
+    const input = riskPreviewSchema.parse(request);
+    const { risk } = assessRequest(input, await this.storage.snapshot(), this.clock());
+    return { risk };
+  }
+
   prepare(request: unknown) {
-    return this.run(async ({ db, emit }) => {
+    return this.run(async unit => {
+      const { db } = unit;
       const input = prepareSchema.parse(request);
-      const sender = db.users.find(u => u.id === input.senderId);
-      requireTx(sender, "ERR_USER_NOT_FOUND");
-      const b2b = input.mode === "B2B";
-      requireTx(sender.role === (b2b ? "ACCOUNTANT_B2B" : "CLIENT_B2C") &&
-        b2b === (input.operationType === "B2B_INVOICE"), "ERR_INVALID_INPUT");
       const now = this.clock();
+      const { sender, risk } = assessRequest(input, db, now);
       checkCoolingOff(sender, now);
-      const risk = assessRisk(input, sender, db.blacklist, now);
+      fundingSource(sender, input);
       const cosignerUserId = risk.requiresCoSign ? sender.linkedCosignerId : undefined;
       requireTx(!risk.requiresCoSign || db.users.some(u => u.id === cosignerUserId &&
-        u.role === (b2b ? "DIRECTOR_B2B" : "COSIGNER_FAMILY")), "ERR_COSIGNER");
+        u.role === (input.mode === "B2B" ? "DIRECTOR_B2B" : "COSIGNER_FAMILY")), "ERR_COSIGNER");
       const txId = "tx_" + crypto.randomUUID();
       const payload: CanonicalTxPayload = {
         amountTenge: input.amountTenge, currency: "KZT", createdAt: now.toISOString(),
@@ -135,25 +152,26 @@ export class TransactionService {
       const webAuthnOptions = await authenticationOptions(sender.id, db.devices, hashBytes);
       requireTx(webAuthnOptions.allowCredentials?.length, "ERR_DEVICE_NOT_FOUND");
       const status = "CHALLENGE_ISSUED" as const;
-      db.transactions.push({
+      const tx: TransactionRecord = {
         id: txId, status, payload, canonicalJson, txHashHex, nonceUsed: false, cosignNonceUsed: false,
         riskScore: risk.score, riskLevel: risk.level, riskReasons: risk.reasons, requiresCoSign: risk.requiresCoSign,
         cosignerUserId, verificationTrace: [], createdAt: payload.createdAt, updatedAt: payload.createdAt,
-      });
-      emit({ type: "TX_UPDATED", txId, status });
+      };
+      db.transactions.push(tx);
+      updated(unit, tx, now);
       return { ok: true as const, status, txId, payload, canonicalJson, txHashHex, risk, webAuthnOptions };
     });
   }
 
-  execute(request: unknown) {
-    return this.run(unit => this.submit(unit, { primary: true, packet: executeSchema.parse(request) }));
+  execute(request: unknown, requestOrigin?: string) {
+    return this.run(unit => this.submit(unit, { primary: true, packet: executeSchema.parse(request) }, requestOrigin));
   }
 
-  cosignSubmit(request: unknown) {
-    return this.run(unit => this.submit(unit, { primary: false, packet: cosignSubmitSchema.parse(request) }));
+  cosignSubmit(request: unknown, requestOrigin?: string) {
+    return this.run(unit => this.submit(unit, { primary: false, packet: cosignSubmitSchema.parse(request) }, requestOrigin));
   }
 
-  private async submit(unit: UnitOfWork, attempt: { primary: true; packet: PrimaryPacket } | { primary: false; packet: SignedPacket }) {
+  private async submit(unit: UnitOfWork, attempt: { primary: true; packet: PrimaryPacket } | { primary: false; packet: SignedPacket }, requestOrigin?: string) {
     const now = this.clock;
     const applyPolicy = (tx: TransactionRecord, signature: SignatureBundle) => {
       const sender = unit.db.users.find(u => u.id === tx.payload.senderId);
@@ -169,12 +187,15 @@ export class TransactionService {
       if (attempt.primary) tx.primarySignature = signature;
       else tx.cosignSignature = signature;
     };
-    const context = { unit, clock: now, applyPolicy };
+    const context = { unit, clock: now, applyPolicy, requestOrigin };
     const result = attempt.primary ? await verifyPrimary(context, attempt.packet) : await verifyCosign(context, attempt.packet);
     const timestamp = now();
+    const details = attempt.primary && attempt.packet.attackTag ? { attackTag: attempt.packet.attackTag } : {};
     if (!result.ok) {
       const tx = unit.db.transactions.find(t => t.id === attempt.packet.txId);
-      if (tx) recordFailure(unit, tx, result, timestamp);
+      if (tx) recordFailure(unit, tx, result, timestamp, details);
+      else audit(unit, { id: attempt.packet.txId }, timestamp, "TX_POLICY_REJECTED", "WARNING", result.message,
+        { ...details, failureCode: result.failureCode, verificationTrace: result.verificationTrace });
       return result;
     }
 
@@ -184,11 +205,11 @@ export class TransactionService {
     updated(unit, tx, timestamp);
     const cosigner = unit.db.users.find(u => u.id === tx.cosignerUserId);
     if (tx.status === "PENDING_COSIGN" && cosigner) {
-      audit(unit, tx, timestamp, "COSIGN_TRIGGERED", "INFO", "Запрошена вторая подпись");
+      audit(unit, tx, timestamp, "COSIGN_TRIGGERED", "INFO", "Запрошена вторая подпись", details);
       unit.emit({ type: "COSIGN_REQUESTED", txId: tx.id, cosignerUserId: cosigner.id });
     } else {
       if (!attempt.primary) audit(unit, tx, timestamp, "COSIGN_APPROVED", "INFO", "Получена вторая подпись", {}, tx.cosignerUserId);
-      audit(unit, tx, timestamp, "TX_EXECUTED", "INFO", "Операция исполнена");
+      audit(unit, tx, timestamp, "TX_EXECUTED", "INFO", "Операция исполнена", details);
     }
     return { ...result, status: tx.status, cosigner: cosigner && { id: cosigner.id, fullName: cosigner.fullName } };
   }
@@ -227,13 +248,26 @@ export class TransactionService {
     });
   }
 
-  listTransactions() {
+  getTransaction(id: string) {
+    return this.run(unit => {
+      const tx = unit.db.transactions.find(item => item.id === id);
+      requireTx(tx, "ERR_TX_NOT_FOUND");
+      const now = this.clock();
+      if (isExpired(tx, now)) expire(unit, tx, now);
+      return { ok: true as const, transaction: tx };
+    });
+  }
+
+  listTransactions(filter: { status?: TxStatus; userId?: string } = {}) {
     return this.run(unit => {
       const now = this.clock();
       for (const tx of unit.db.transactions) {
         if (isExpired(tx, now)) expire(unit, tx, now);
       }
-      return { ok: true as const, transactions: unit.db.transactions };
+      const transactions = unit.db.transactions.filter(tx =>
+        (!filter.status || tx.status === filter.status) &&
+        (!filter.userId || tx.payload.senderId === filter.userId || tx.cosignerUserId === filter.userId));
+      return { ok: true as const, transactions };
     });
   }
 }

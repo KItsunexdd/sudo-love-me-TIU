@@ -1,12 +1,15 @@
 import { z } from "zod";
 
-const text = z.string().trim().min(1).max(256);
+export const text = z.string().trim().min(1).max(256);
 export const prepareSchema = z.object({
   senderId: text, mode: z.enum(["B2C", "B2B"]),
   operationType: z.enum(["P2P_TRANSFER", "DEPOSIT_CLOSE", "ONLINE_LOAN", "B2B_INVOICE"]),
   recipientName: text, recipientAccount: text, amountTenge: z.number().int().positive(),
   purpose: z.string().max(512),
   simulatedContext: z.object({ activeUnknownCall: z.boolean().optional(), nightTimeOverride: z.boolean().optional() }).optional(),
+});
+export const riskPreviewSchema = prepareSchema.pick({
+  senderId: true, mode: true, operationType: true, amountTenge: true, recipientAccount: true, simulatedContext: true,
 });
 
 const assertionSchema = z.object({
@@ -22,6 +25,7 @@ const signedFields = {
 const payloadObject = z.custom<object>(v => v !== null && typeof v === "object" && !Array.isArray(v));
 export const executeSchema = z.object({
   ...signedFields, submittedPayload: payloadObject, acknowledgedWarning: z.boolean().optional(),
+  attackTag: z.enum(["NONE", "MITM_AMOUNT", "MITM_RECIPIENT", "REPLAY", "PHISHING_ORIGIN"]).optional(),
   quantumSimulation: z.boolean().optional(),
 });
 export const cosignSubmitSchema = z.object({ ...signedFields, submittedPayload: payloadObject.optional() });

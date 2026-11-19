@@ -6,6 +6,7 @@ import {
 import type { DeviceKind, RegisteredDevice, User } from "@/lib/db/types";
 import { bytesToHex, fromBase64, fromBase64Url, sha256, toBase64Url, utf8 } from "./canonical";
 import { ML_DSA_BYTES } from "./mldsa";
+import { requireTx, TxError } from "@/lib/tx/errors";
 
 export function relyingParty() {
   return {
@@ -36,8 +37,10 @@ export async function verifyRegistration(input: {
   response: RegistrationResponseJSON; pqPublicKeyBase64: string;
 }): Promise<RegisteredDevice> {
   const { rpId, expectedOrigin } = relyingParty();
-  const publicKey = fromBase64(input.pqPublicKeyBase64);
-  if (publicKey.length !== ML_DSA_BYTES.publicKey) throw new TypeError("Некорректный размер открытого ключа ML-DSA-65");
+  let publicKey: Uint8Array;
+  try { publicKey = fromBase64(input.pqPublicKeyBase64); }
+  catch { throw new TxError("ERR_INVALID_INPUT"); }
+  requireTx(publicKey.length === ML_DSA_BYTES.publicKey, "ERR_INVALID_INPUT");
   const result = await verifyRegistrationResponse({
     response: input.response, expectedChallenge: input.expectedChallenge,
     expectedOrigin, expectedRPID: rpId, supportedAlgorithmIDs: [-7], requireUserVerification: true,

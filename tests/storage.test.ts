@@ -39,7 +39,7 @@ it.each(["file", "memory"])("CAS и откат операций между эк�
       throw new Error("откат");
     })).rejects.toThrow("откат");
     const snapshot = await b.snapshot();
-    expect(snapshot.users[0].balanceTenge).toBe(450_000);
+    expect(snapshot.users[0].balanceTenge).toBe(1_200_000);
     snapshot.users.length = 0;
     expect((await a.snapshot()).users).toHaveLength(4);
     expect((await a.snapshot()).transactions[0].nonceUsed).toBe(true);
