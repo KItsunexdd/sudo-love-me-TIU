@@ -132,7 +132,10 @@ export interface HybridSignature {
 
 type AuthenticationOptions = PrepareResponse["webAuthnOptions"];
 
-async function signHybrid(userId: string, deviceId: string, options: AuthenticationOptions, message: Uint8Array): Promise<HybridSignature> {
+type SignOptions = { originOverride?: string };
+
+async function signHybrid(userId: string, deviceId: string, options: AuthenticationOptions, message: Uint8Array,
+  { originOverride }: SignOptions = {}): Promise<HybridSignature> {
   const device = await withKeystore(() => getLocalDevice(deviceId));
   if (device?.userId !== userId || !options.allowCredentials?.some(item => item.id === device.credentialId)) {
     throw signerError("ERR_DEVICE_NOT_REGISTERED", "Для этой операции нужен локальный ключ указанного пользователя.");
@@ -146,12 +149,13 @@ async function signHybrid(userId: string, deviceId: string, options: Authenticat
     const credential = await withKeystore(() => openSoftwareCredential(deviceId, userId));
     const started = performance.now();
     try {
-      webAuthnAssertion = await assertSoftware(credential, restrictedOptions);
+      webAuthnAssertion = await assertSoftware(credential, restrictedOptions, { originOverride });
     } catch (error) {
       throw webAuthnError(error);
     }
     webauthnMs = performance.now() - started;
   } else {
+    if (originOverride) throw signerError("ERR_SOFTWARE_KEY_REQUIRED", "Подпись с чужого origin моделируется только программным ключом.");
     if (!webAuthnAvailable()) throw signerError("ERR_WEBAUTHN_UNSUPPORTED", "На устройстве недоступен Passkey.");
     const { startAuthentication } = await import("@simplewebauthn/browser");
     const started = performance.now();
@@ -181,14 +185,14 @@ function invalidChallenge() {
   return signerError("ERR_SIGNING_CHALLENGE", "Хэш реквизитов не совпадает с запросом на подпись. Подготовьте операцию заново.");
 }
 
-export async function signPrimary(prepareResponse: PrepareResponse, deviceId: string) {
+export async function signPrimary(prepareResponse: PrepareResponse, deviceId: string, options: SignOptions = {}) {
   const { payload, txId, txHashHex, webAuthnOptions } = prepareResponse;
   const hash = hashPayload(payload);
   if (payload.txId !== txId || hash.txHashHex !== txHashHex || hash.webAuthnChallenge !== webAuthnOptions.challenge) {
     throw invalidChallenge();
   }
   const { primaryMessage } = await import("@/lib/crypto/mldsa");
-  return signHybrid(payload.senderId, deviceId, webAuthnOptions, primaryMessage(hash.hashBytes));
+  return signHybrid(payload.senderId, deviceId, webAuthnOptions, primaryMessage(hash.hashBytes), options);
 }
 
 export async function signCosign(prepareResponse: CosignPrepareResponse, deviceId: string) {

@@ -139,6 +139,7 @@ async function verifyHybrid(context: VerificationContext, packet: SignedPacket, 
     const signedAt = clock();
     requireTx(!isExpired(record, signedAt), "ERR_TX_EXPIRED");
     const signature: SignatureBundle = {
+      ...(packet.clientTimings && { clientTimings: packet.clientTimings }),
       signerUserId: device.userId, deviceId: device.id, signedAt: signedAt.toISOString(),
       webAuthnCredentialId: device.credentialId, webAuthnClientDataJson: origin.value,
       webAuthnPublicKey: device.webAuthnPublicKey, pqPublicKey: device.pqPublicKey,

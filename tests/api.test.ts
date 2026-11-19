@@ -126,7 +126,8 @@ describe("REST §7", () => {
     const packet = await primary(sender, high);
     const { txId } = packet;
     const context = { txId, cosignerUserId: arman };
-    const pending = await read(execute(req("transactions/execute", packet)), 202);
+    const clientTimings = { webauthnMs: 123.45, pqSignMs: 2.75 };
+    const pending = await read(execute(req("transactions/execute", { ...packet, clientTimings })), 202);
     expect(pending).toMatchObject({ status: "PENDING_COSIGN", cosigner: { id: arman }, transaction: { id: txId } });
     expect((await read(transactions(req("transactions?status=PENDING_COSIGN&userId=usr_arman")))).transactions).toHaveLength(1);
     expect((await read(transactions(req("transactions?status=PENDING_COSIGN&userId=usr_timur")))).transactions).toHaveLength(0);
@@ -149,6 +150,7 @@ describe("REST §7", () => {
     }
     const record = await read(transaction(req("transactions/" + txId), { params: Promise.resolve({ id: txId }) }));
     expect(record.transaction.status).toBe(expectedStatus);
+    expect(record.transaction.primarySignature.clientTimings).toEqual(clientTimings);
     const { aggregates } = await read(soc(req("soc/events")));
     expect(aggregates.savedAmountTenge).toBe(decision === "reject" ? 850_000 : 0);
     expect(aggregates.verification.mlDsa.count).toBe(decision === "reject" ? 1 : 2);
