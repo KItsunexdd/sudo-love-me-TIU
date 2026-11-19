@@ -56,12 +56,19 @@ export function hashPayload(payload: unknown) {
   return { canonicalJson, hashBytes, txHashHex: bytesToHex(hashBytes), webAuthnChallenge: toBase64Url(hashBytes) };
 }
 
+export function escapeDisplayControls(value: string) {
+  return value.replace(/[\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}\p{Zl}\p{Zp}]/gu, character => {
+    const code = character.codePointAt(0)!.toString(16).toUpperCase();
+    return code.length > 4 ? `\\u{${code}}` : `\\u${code.padStart(4, "0")}`;
+  });
+}
+
 export function computeTamperDiff(original: object, submitted: object): TamperDiff {
   const before = new Map(Object.entries(original));
   const after = new Map(Object.entries(submitted));
   const diff: TamperDiff = [];
   const show = (value: unknown) => value === undefined ? "(отсутствует)" :
-    typeof value === "string" ? value : serializeCanonicalJSON(value);
+    escapeDisplayControls(typeof value === "string" ? value : serializeCanonicalJSON(value));
   for (const field of [...new Set([...before.keys(), ...after.keys()])].sort()) {
     const a: unknown = before.get(field);
     const b: unknown = after.get(field);
@@ -69,7 +76,7 @@ export function computeTamperDiff(original: object, submitted: object): TamperDi
       const original = show(a);
       const tampered = show(b);
       // Show a change of type even when both values have identical display text.
-      diff.push({ field, original, tampered: typeof b === "string" && original === tampered ? JSON.stringify(b) : tampered });
+      diff.push({ field, original, tampered: typeof b === "string" && original === tampered ? escapeDisplayControls(JSON.stringify(b)) : tampered });
     }
   }
   return diff;

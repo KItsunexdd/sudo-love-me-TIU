@@ -146,7 +146,7 @@ export function TransferForm({ mode, sender, presets, initialPreset, device, dev
             />
           </label>
           <label className="type-label text-ink-secondary">
-            Счёт (IBAN)
+            IBAN, карта или телефон
             <input
               className={`${fieldClass} font-mono tabular-nums`}
               value={recipientAccount}

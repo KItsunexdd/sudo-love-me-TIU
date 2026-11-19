@@ -87,7 +87,7 @@ async function request<T>(path: string | (() => string), spec: RequestSpec = {},
       method: spec.method ?? "GET", cache: "no-store", signal: stream ? spec.signal : controller.signal,
       headers: {
         Accept: stream ? "text/event-stream" : "application/json",
-        ...(spec.body !== undefined && { "Content-Type": "application/json" }),
+        ...((spec.method === "POST" || spec.method === "DELETE") && { "Content-Type": "application/json" }),
       },
       body: spec.body === undefined ? undefined : JSON.stringify(spec.body),
     });

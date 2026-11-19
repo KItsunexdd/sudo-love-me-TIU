@@ -12,6 +12,7 @@ import { failure, failureFrom, isCryptoFailure, requireTx, type Failure } from "
 import { prepareSchema, riskPreviewSchema, cosignerSchema, cosignSubmitSchema, executeSchema, rejectSchema } from "./inputs";
 
 const MINUTE = 60_000;
+const MAX_ACTIVE_CHALLENGES = 32;
 export const PRIMARY_TTL = 5 * MINUTE;
 export const COSIGN_TTL = 15 * MINUTE;
 export const COOLING_OFF = 24 * 60 * MINUTE;
@@ -120,7 +121,9 @@ function rejectedEvidence(packet: SignedPacket): NonNullable<TransactionRecord["
 }
 
 function recordFailure(unit: UnitOfWork, tx: TransactionRecord, role: SigningRole, result: Failure, now: Date, details: Record<string, unknown>, packet: SignedPacket) {
-  const rejection = { ...details, failureCode: result.failureCode, verificationTrace: result.verificationTrace, tamperDiff: result.tamperDiff };
+  const rejection = { ...details,
+    ...(result.failureCode === "ERR_REPLAY_DETECTED" && { replayOfExecuted: tx.status === "EXECUTED" }),
+    failureCode: result.failureCode, verificationTrace: result.verificationTrace, tamperDiff: result.tamperDiff };
   if (result.failureCode === "ERR_TX_EXPIRED" && tx.status !== "EXPIRED") {
     tx.verificationTrace = result.verificationTrace;
     expire(unit, tx, now, rejection);
@@ -178,6 +181,9 @@ export class TransactionService {
       checkCoolingOff(sender, now);
       fundingSource(sender, input);
       const cosignerUserId = risk.requiresCoSign ? assignedCosigner(db, input.mode, sender.linkedCosignerId) : undefined;
+      const active = db.transactions.filter(tx => tx.payload.senderId === sender.id &&
+        tx.status === "CHALLENGE_ISSUED" && !isExpired(tx, now));
+      requireTx(active.length < MAX_ACTIVE_CHALLENGES, "ERR_PREPARE_LIMIT");
       const txId = "tx_" + crypto.randomUUID();
       const payload: CanonicalTxPayload = {
         amountTenge: input.amountTenge, currency: "KZT", createdAt: now.toISOString(),
@@ -201,15 +207,15 @@ export class TransactionService {
     });
   }
 
-  execute(request: unknown, requestOrigin?: string) {
-    return this.run(unit => this.submit(unit, { primary: true, packet: executeSchema.parse(request) }, requestOrigin));
+  execute(request: unknown, requestOrigin?: string, targetUrl?: string) {
+    return this.run(unit => this.submit(unit, { primary: true, packet: executeSchema.parse(request) }, requestOrigin, targetUrl));
   }
 
-  cosignSubmit(request: unknown, requestOrigin?: string) {
-    return this.run(unit => this.submit(unit, { primary: false, packet: cosignSubmitSchema.parse(request) }, requestOrigin));
+  cosignSubmit(request: unknown, requestOrigin?: string, targetUrl?: string) {
+    return this.run(unit => this.submit(unit, { primary: false, packet: cosignSubmitSchema.parse(request) }, requestOrigin, targetUrl));
   }
 
-  private async submit(unit: UnitOfWork, attempt: { primary: true; packet: PrimaryPacket } | { primary: false; packet: SignedPacket }, requestOrigin?: string) {
+  private async submit(unit: UnitOfWork, attempt: { primary: true; packet: PrimaryPacket } | { primary: false; packet: SignedPacket }, requestOrigin?: string, targetUrl?: string) {
     const now = this.clock;
     const preparePolicy = (tx: TransactionRecord) => {
       const sender = unit.db.users.find(u => u.id === tx.payload.senderId);
@@ -241,10 +247,13 @@ export class TransactionService {
         else tx.cosignSignature = signature;
       };
     };
-    const context = { unit, clock: now, preparePolicy, requestOrigin };
+    const context = { unit, clock: now, preparePolicy, requestOrigin, targetUrl };
     const result = attempt.primary ? await verifyPrimary(context, attempt.packet) : await verifyCosign(context, attempt.packet);
     const timestamp = now();
-    const details = attempt.primary && attempt.packet.attackTag ? { attackTag: attempt.packet.attackTag } : {};
+    const details = attempt.primary ? {
+      attackTag: attempt.packet.attackTag,
+      quantumSimulation: attempt.packet.quantumSimulation,
+    } : {};
     if (!result.ok) {
       const tx = unit.db.transactions.find(t => t.id === attempt.packet.txId);
       if (tx) recordFailure(unit, tx, attempt.primary ? "primary" : "cosign", result, timestamp, details, attempt.packet);
@@ -260,7 +269,7 @@ export class TransactionService {
     const cosigner = unit.db.users.find(u => u.id === tx.cosignerUserId);
     if (tx.status === "PENDING_COSIGN" && cosigner) {
       audit(unit, tx, timestamp, "COSIGN_TRIGGERED", "INFO", "Запрошена вторая подпись", details);
-      unit.emit({ type: "COSIGN_REQUESTED", txId: tx.id, cosignerUserId: cosigner.id });
+      unit.emit({ type: "COSIGN_REQUESTED", txId: tx.id, senderId: tx.payload.senderId, cosignerUserId: cosigner.id });
     } else {
       if (!attempt.primary) audit(unit, tx, timestamp, "COSIGN_APPROVED", "INFO", "Получена вторая подпись", {}, tx.cosignerUserId);
       audit(unit, tx, timestamp, "TX_EXECUTED", "INFO", "Операция исполнена", details);

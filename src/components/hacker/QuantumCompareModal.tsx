@@ -2,7 +2,7 @@
 
 import { motion, useReducedMotion } from "framer-motion";
 import { Atom, LockKeyholeOpen, ShieldCheck } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Badge, Button, Card, ErrorCard, Modal } from "@/components/ui";
 import { VerificationStepsList } from "@/components/crypto/VerificationStepsList";
 import { api, type ApiError, type ApiResult, type ExecuteResponse, type PrepareInput } from "@/lib/client/api";
@@ -15,13 +15,15 @@ export function QuantumCompareModal({ sample, deviceId, onClose, onInspect, onRe
   onResult: (id: string, result: ApiResult<ExecuteResponse>) => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
   const [error, setError] = useState<ApiError>();
   const [http, setHttp] = useState<number>();
   const [id, setId] = useState<string>();
   const reduce = useReducedMotion();
 
   async function check() {
-    if (!deviceId || busy) return;
+    if (!deviceId || submitting.current) return;
+    submitting.current = true;
     setBusy(true);
     setError(undefined);
     setHttp(undefined);
@@ -50,6 +52,7 @@ export function QuantumCompareModal({ sample, deviceId, onClose, onInspect, onRe
     } catch (cause) {
       setError(toClientError(cause));
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   }

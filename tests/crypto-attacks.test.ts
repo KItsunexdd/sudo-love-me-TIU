@@ -256,7 +256,7 @@ describe("Вторая рука", () => {
       });
       expect(await service.prepare(low)).toMatchObject({ failureCode: "ERR_COOLING_OFF" });
       expect((await storage.snapshot()).users[0]).toMatchObject({ balanceTenge: 1_200_000, depositBalanceTenge: 2_500_000 });
-      expect(events).toContainEqual({ type: "COSIGN_REQUESTED", txId: tx.txId, cosignerUserId: "usr_arman" });
+      expect(events).toContainEqual({ type: "COSIGN_REQUESTED", txId: tx.txId, senderId: tx.payload.senderId, cosignerUserId: "usr_arman" });
       expect(events).toContainEqual(expect.objectContaining({ type: "SECURITY_ALERT",
         event: expect.objectContaining({ eventType: "SOCENG_STOPPED_BY_COSIGNER" }) }));
       time += COOLING_OFF;

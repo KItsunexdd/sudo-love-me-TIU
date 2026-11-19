@@ -29,7 +29,7 @@ type Outcome = { type: "error"; error: ApiError; httpStatus?: number } |
   { type: "transfer"; data: ExecuteResponse; timings: HybridSignature["timings"] };
 
 function KitSmoke() {
-  const { users, recipientPresets, connectionStatus, error: stateError } = useDemoState();
+  const { users, recipientPresets, connectionStatus, error: stateError } = useDemoState(userId);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [busy, setBusy] = useState<"register" | "transfer" | null>(null);
   const { toast } = useToast();

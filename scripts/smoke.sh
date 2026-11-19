@@ -9,6 +9,6 @@ for path in users 'devices?userId=usr_aigul' transactions 'events/poll?since=0' 
 done
 
 curl --fail --silent --show-error --max-time 30 \
-  --header 'Content-Type: application/json' --data '{"keepDevices":true}' \
+  --header "Origin: $base" --header 'Content-Type: application/json' --data '{"keepDevices":true}' \
   "$base/api/demo/reset"
 printf '\n'

@@ -116,7 +116,7 @@ export function CosignFeed({ userId, mode, compact = false, hideConnectionBadge 
   userId: string; mode: Mode; compact?: boolean; hideConnectionBadge?: boolean; profileSwitch?: ReactNode;
 }) {
   const feed = useCosignFeed(userId, mode);
-  const { users } = useDemoState();
+  const { users } = useDemoState(userId);
   const deviceState = useCosignDevice(userId, feed.syncVersion, feed.resyncVersion, feed.resetId);
   const device = deviceState.devices[0];
   const [action, setAction] = useState<{ txId: string; kind: "sign" | "reject" }>();
@@ -286,14 +286,14 @@ export function CosignFeed({ userId, mode, compact = false, hideConnectionBadge 
             </section>
           ) : (
             <>
-              {!outcome && !recentActionError && latest?.failureCode && (
+              {!outcome && !recentActionError && latest?.failureCode && latest.failureCode !== "ERR_TX_EXPIRED" && (
                 <ErrorCard error={{
                   status: latest.status,
                   failureCode: latest.failureCode,
                   message: failureMessages[latest.failureCode],
                 }} />
               )}
-              {!feed.error && !outcome && !latest?.failureCode && (
+              {!feed.error && !outcome && (!latest?.failureCode || latest.failureCode === "ERR_TX_EXPIRED") && (
                 <EmptyState
                   icon={ShieldCheck}
                   className={compact ? "p-4" : "p-5"}

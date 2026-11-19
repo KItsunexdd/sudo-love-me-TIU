@@ -5,15 +5,19 @@ import { ArrowLeft, ExternalLink, Fingerprint, Gift, Globe, ShieldCheck } from "
 import { Badge, Button, Card, ErrorCard } from "@/components/ui";
 import { formatTenge } from "@/lib/ui/format";
 
-export function OriginCheck({ rpId, bankOrigin }: { rpId: string; bankOrigin: string }) {
+export function OriginCheck({ rpId, bankOrigin: configuredOrigin }: { rpId: string; bankOrigin?: string }) {
   const [origin, setOrigin] = useState("");
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState<{ code: string; message: string }>();
 
   useEffect(() => { setOrigin(location.origin); }, []);
 
+  const local = origin ? new URL(origin) : undefined;
+  if (local) local.hostname = "localhost";
+  const bankOrigin = configuredOrigin ?? local?.origin;
   const sameOrigin = origin === bankOrigin;
-  const otherUrl = origin && `http://127.0.0.1${new URL(origin).port ? ":" + new URL(origin).port : ""}/phishing-clone`;
+  if (local) local.hostname = "127.0.0.1";
+  const otherUrl = local && new URL("/phishing-clone", local).href;
 
   async function check() {
     setBusy(true);

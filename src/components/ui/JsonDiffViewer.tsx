@@ -1,3 +1,4 @@
+import { escapeDisplayControls } from "@/lib/crypto/canonical";
 import type { TamperDiff } from "@/lib/db/types";
 import { formatIban, formatTenge } from "@/lib/ui/format";
 import { Badge } from "./Badge";
@@ -26,7 +27,8 @@ function serialize(value: unknown, json?: string) {
   }
 }
 
-function renderDiffValue(field: string, raw: string) {
+function renderDiffValue(field: string, value: string) {
+  const raw = escapeDisplayControls(value);
   if (field === "amountTenge") {
     const parsed = Number(raw);
     if (Number.isFinite(parsed)) {
@@ -41,7 +43,7 @@ function renderDiffValue(field: string, raw: string) {
   if (field === "recipientAccount" || field === "senderAccount") {
     return (
       <span className="inline-flex flex-wrap items-baseline gap-1.5">
-        <code className="font-mono font-semibold" title={raw}>{formatIban(raw)}</code>
+        <code className="font-mono font-semibold" title={raw}>{raw.includes("\\u") ? raw : formatIban(raw)}</code>
       </span>
     );
   }

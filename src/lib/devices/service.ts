@@ -3,11 +3,11 @@ import { fromBase64Url } from "@/lib/crypto/canonical";
 import { ML_DSA_BYTES } from "@/lib/crypto/mldsa";
 import { registrationOptions, relyingParty, verifyRegistration } from "@/lib/crypto/webauthn";
 import { getStorage } from "@/lib/db/store";
-import { authenticatorData, clientDataJSON, text } from "@/lib/tx/inputs";
+import { authenticatorData, clientDataJSON, displayText, text } from "@/lib/tx/inputs";
 import { requireTx, TxError } from "@/lib/tx/errors";
 
 const registration = z.object({
-  userId: text, deviceName: z.string().trim().min(1).max(120), deviceKind: z.enum(["PLATFORM_PASSKEY", "SOFTWARE_FALLBACK"]).optional(),
+  userId: text, deviceName: displayText.pipe(z.string().trim().min(1).max(120)), deviceKind: z.enum(["PLATFORM_PASSKEY", "SOFTWARE_FALLBACK"]).optional(),
 });
 const attestation = z.object({
   type: z.literal("public-key"), id: z.string().min(1).max(1400), rawId: z.string().min(1).max(1400),
@@ -38,9 +38,9 @@ export async function beginRegistration(body: unknown) {
   });
 }
 
-export async function finishRegistration(body: unknown, origin: string) {
+export async function finishRegistration(body: unknown, origin: string, targetUrl?: string) {
   const input = verification.parse(body);
-  requireTx(origin === relyingParty().expectedOrigin, "ERR_ORIGIN_MISMATCH");
+  requireTx(origin === relyingParty(targetUrl).expectedOrigin, "ERR_ORIGIN_MISMATCH");
   let clientData;
   try {
     const raw = fromBase64Url(input.attestationResponse.response.clientDataJSON);
@@ -57,7 +57,7 @@ export async function finishRegistration(body: unknown, origin: string) {
       (!input.challengeId || input.challengeId === ceremony.challenge) &&
       (!ceremony.deviceKind || !input.deviceKind || ceremony.deviceKind === input.deviceKind), "ERR_WEBAUTHN_INVALID");
     const device = await verifyRegistration({
-      user, expectedChallenge: ceremony.challenge, response: input.attestationResponse, deviceName: ceremony.deviceName,
+      user, targetUrl, expectedChallenge: ceremony.challenge, response: input.attestationResponse, deviceName: ceremony.deviceName,
       deviceKind: ceremony.deviceKind ?? input.deviceKind ?? "PLATFORM_PASSKEY", pqPublicKeyBase64: input.pqPublicKeyBase64,
       pqProofOfPossessionBase64: input.pqProofOfPossessionBase64,
     }).catch(error => { throw error instanceof TxError ? error : new TxError("ERR_WEBAUTHN_INVALID"); });

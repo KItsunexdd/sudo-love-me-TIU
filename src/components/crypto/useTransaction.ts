@@ -6,8 +6,8 @@ import { useEventStream } from "@/lib/client/useEventStream";
 import type { TransactionRecord } from "@/lib/db/types";
 
 /** Subscribe first, then read the current record, including after reconnects. */
-export function useTransaction(id: string | null) {
-  const { events, syncVersion, resyncVersion } = useEventStream();
+export function useTransaction(id: string | null, userId: string) {
+  const { events, syncVersion, resyncVersion } = useEventStream({ userId });
   const latest = events.findLast(event => event.type === "DEMO_RESET" || ("txId" in event && event.txId === id))?.id;
   const [response, setResponse] = useState<{ id: string; record?: TransactionRecord; error?: ApiError }>();
   const [revision, setRevision] = useState(0);

@@ -4,8 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { api, type ApiError, type DemoUsersResponse } from "./api";
 import { useEventStream } from "./useEventStream";
 
-export function useDemoState() {
-  const { lastEvent, status: connectionStatus, syncVersion, resyncVersion } = useEventStream();
+export function useDemoState(userId: string) {
+  const { lastEvent, status: connectionStatus, syncVersion, resyncVersion } = useEventStream({ userId });
   const [data, setData] = useState<DemoUsersResponse | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(true);

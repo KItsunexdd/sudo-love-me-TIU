@@ -4,13 +4,16 @@ export const text = z.string().trim().min(1).max(256);
 const mode = z.enum(["B2C", "B2B"]);
 const operationType = z.enum(["P2P_TRANSFER", "DEPOSIT_CLOSE", "ONLINE_LOAN", "B2B_INVOICE"]);
 // Bound normalization work even for decomposed Unicode input.
-const displayText = z.string().max(560).pipe(z.string().refine(value => !/[\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}\p{Zl}\p{Zp}]/u.test(value),
-  "Имя получателя и назначение платежа не могут содержать управляющие или невидимые символы")
+export const displayText = z.string().max(560).pipe(z.string().refine(value => !/[\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}\p{Zl}\p{Zp}]/u.test(value),
+  "Поле не может содержать управляющие или невидимые символы")
   .transform(value => value.normalize("NFC")));
 
 export const prepareSchema = z.object({
   senderId: text, mode, operationType,
-  recipientName: displayText.pipe(z.string().trim().min(1).max(120)), recipientAccount: text,
+  recipientName: displayText.pipe(z.string().trim().min(1).max(120)), recipientAccount: displayText.pipe(z.string().regex(
+    /^(?:KZ[0-9]{5}[A-Z0-9]{13}|[0-9]{16}|\+[1-9][0-9]{7,14}|[78][0-9]{10})$/,
+    "Введите IBAN Казахстана, номер карты из 16 цифр или телефон",
+  )),
   amountTenge: z.number().int().positive(), purpose: displayText.pipe(z.string().max(140)),
   simulatedContext: z.object({ activeUnknownCall: z.boolean().optional(), nightTimeOverride: z.boolean().optional() }).optional(),
 });

@@ -163,11 +163,14 @@ export function getLocalDevice(deviceId: string): Promise<LocalDevice | undefine
   return readEntry(deviceId).then(entry => entry?.device);
 }
 
-export async function clearLocalDevices() {
+export async function clearLocalDevices(ids?: string[]) {
+  if (ids?.length === 0) return;
   // Keep the wrapping key consistent with a registration that may be encrypting in another tab.
   await transact<void>("devices", "readwrite", (store, done) => {
-    const request = store.clear();
-    request.onsuccess = () => done();
+    if (ids) {
+      for (const id of ids) store.delete(id);
+    } else store.clear();
+    done();
   });
   announceChange();
 }

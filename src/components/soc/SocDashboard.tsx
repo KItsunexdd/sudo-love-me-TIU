@@ -304,11 +304,11 @@ export function SocDashboard() {
 
       {/* 4 KPI-карточки в реальном времени */}
       <section aria-label="Ключевые показатели SOC" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {/* KPI 1: Отражено атак */}
+        {/* KPI 1: Атак отражено */}
         <Card variant={(aggregates?.attacksBlocked ?? 0) > 0 ? "danger" : "default"}>
           <div className="flex items-center justify-between gap-2">
             <span className={`font-semibold uppercase tracking-wider text-ink-secondary ${projectorMode ? "text-sm" : "text-xs"}`}>
-              Отражено атак
+              Атак отражено
             </span>
             <span className="grid size-9 place-items-center rounded-xl border border-danger/40 bg-danger/[.14] text-danger-text">
               <ShieldAlert aria-hidden="true" className="size-5" />
@@ -325,17 +325,18 @@ export function SocDashboard() {
             </div>
           )}
           <p className={`mt-2 font-medium text-ink-secondary ${projectorMode ? "text-sm" : "text-xs"}`}>
-            {(aggregates?.attacksBlocked ?? 0) > 0
-              ? "100% заблокировано криптографически и Co-Sign"
-              : "Ожидание атак из Панели хакера"}
+            Объём атакованных операций · {formatTenge(aggregates?.attackedAmountTenge ?? 0)}
+          </p>
+          <p className={`mt-1 font-medium text-ink-secondary ${projectorMode ? "text-sm" : "text-xs"}`}>
+            Предотвращено подмен на сумму · {formatTenge(aggregates?.preventedTamperAmountTenge ?? 0)}
           </p>
         </Card>
 
-        {/* KPI 2: Спасено средств (₸) */}
+        {/* KPI 2: Спасено от мошенничества */}
         <Card variant={(aggregates?.savedAmountTenge ?? 0) > 0 ? "success" : "default"}>
           <div className="flex items-center justify-between gap-2">
             <span className={`font-semibold uppercase tracking-wider text-ink-secondary ${projectorMode ? "text-sm" : "text-xs"}`}>
-              Спасено средств (₸)
+              Спасено от мошенничества
             </span>
             <span className="grid size-9 place-items-center rounded-xl border border-bcc/40 bg-bcc/[.12] text-bcc">
               <Wallet aria-hidden="true" className="size-5" />
@@ -352,7 +353,7 @@ export function SocDashboard() {
             </div>
           )}
           <p className={`mt-2 font-medium text-ink-secondary ${projectorMode ? "text-sm" : "text-xs"}`}>
-            MITM + Фишинг + Replay + Социнженерия
+            Отклонено Второй рукой и предотвращено повторных списаний
           </p>
         </Card>
 

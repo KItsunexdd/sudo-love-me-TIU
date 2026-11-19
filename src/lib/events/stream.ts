@@ -1,17 +1,22 @@
-import { currentCursor, matches, subscribe, type EventFilter } from "./bus";
+import { matches } from "./filter";
+import { currentCursor, subscribe, type EventFilter } from "./bus";
 
 export function streamEvents(signal: AbortSignal, filter: EventFilter) {
   const encoder = new TextEncoder();
   let cancel: () => void;
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
+      function write(chunk: string) {
+        try { controller.enqueue(encoder.encode(chunk)); }
+        catch { cancel(); }
+      }
       const send = (event: string, data: unknown, cursor: number) => {
-        controller.enqueue(encoder.encode(`id: ${cursor}\nevent: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+        write(`id: ${cursor}\nevent: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
       };
       const unsubscribe = subscribe((event, cursor) => {
         if (matches(event, filter)) send(event.type, event, cursor);
       });
-      const heartbeat = setInterval(() => controller.enqueue(encoder.encode(": heartbeat\n\n")), 15_000);
+      const heartbeat = setInterval(() => write(": heartbeat\n\n"), 15_000);
       cancel = () => {
         clearInterval(heartbeat);
         unsubscribe();

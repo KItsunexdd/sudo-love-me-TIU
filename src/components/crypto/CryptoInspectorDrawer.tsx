@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { Atom, Copy, Fingerprint, Link2 } from "lucide-react";
 import { Badge, Button, Card, Drawer, ErrorCard, HashChip, JsonDiffViewer, Skeleton, useToast } from "@/components/ui";
 import { useDemoState } from "@/lib/client/useDemoState";
@@ -60,11 +61,14 @@ function signatureDigest(value: string) {
   try { return bytesToHex(sha256(fromBase64(value))); } catch { return null; }
 }
 
-export function CryptoInspectorDrawer({ txId, open = true, onClose, onQuantum }: {
-  txId: string | null; open?: boolean; onClose: () => void; onQuantum?: () => void;
+export function CryptoInspectorDrawer({ txId, userId, open = true, onClose, onQuantum }: {
+  txId: string | null; userId: string; open?: boolean; onClose: () => void; onQuantum?: () => void;
 }) {
-  const { record: tx, error, retry } = useTransaction(open ? txId : null);
-  const { users } = useDemoState();
+  const { record: tx, error, retry } = useTransaction(open ? txId : null, userId);
+  const { users } = useDemoState(userId);
+  const missing = error?.failureCode === "ERR_TX_NOT_FOUND";
+  useEffect(() => { if (missing) onClose(); }, [missing, onClose]);
+  if (missing) return null;
   const owner = (id: string) => users.find(user => user.id === id)?.fullName ?? id;
   const link = tx?.requiresCoSign && tx.primarySignature ? signatureDigest(tx.primarySignature.pqSignatureBase64) : null;
   return <Drawer open={open && Boolean(txId)} onClose={onClose} title="Crypto Inspector" description={<span className="break-all font-mono">{txId}</span>}

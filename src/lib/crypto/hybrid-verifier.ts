@@ -16,6 +16,7 @@ export type PrimaryPacket = z.infer<typeof executeSchema>;
 export interface VerificationContext {
   unit: UnitOfWork;
   requestOrigin?: string;
+  targetUrl?: string;
   clock(): Date;
   preparePolicy(tx: TransactionRecord): (signature: SignatureBundle) => void;
 }
@@ -77,7 +78,7 @@ async function verifyHybrid(context: VerificationContext, packet: SignedPacket, 
     const device = db.devices.find(d => d.id === packet.deviceId && d.userId === signer);
     requireTx(device, primary ? "ERR_DEVICE_NOT_ALLOWED" : "ERR_COSIGNER");
     if (!primary) enforceIndependentDevice(device, tx.primarySignature, db.devices);
-    return { record: tx, device, applyPolicy: context.preparePolicy(tx) };
+    return { record: tx, device };
   });
   if (!state.ok) return failure(state.code, trace.rows, state.message);
   // The storage transaction holds the lock through verification and final nonce consumption.
@@ -86,7 +87,7 @@ async function verifyHybrid(context: VerificationContext, packet: SignedPacket, 
     return state.value;
   });
   if (!nonce.ok) return failure(nonce.code, trace.rows);
-  const { record, device, applyPolicy } = nonce.value;
+  const { record, device } = nonce.value;
 
   const submitted = packet.submittedPayload ?? record.payload;
   const integrity = await trace.check(3, "ERR_INVALID_INPUT", () => {
@@ -104,7 +105,7 @@ async function verifyHybrid(context: VerificationContext, packet: SignedPacket, 
     Object.assign(trace.rows[2], { passed: false, outcome: "FAIL", details: failureMessages.ERR_WYSIWYS_TAMPERED });
   }
   const assertion = packet.webAuthnAssertion;
-  const { rpId, expectedOrigin } = relyingParty();
+  const { rpId, expectedOrigin } = relyingParty(context.targetUrl);
   const origin = await trace.check(4, "ERR_ORIGIN_MISMATCH", () => {
     const json = new TextDecoder().decode(fromBase64Url(assertion.response.clientDataJSON));
     const data = JSON.parse(json);
@@ -119,7 +120,7 @@ async function verifyHybrid(context: VerificationContext, packet: SignedPacket, 
   });
   if (!origin.ok && !diff) return failure(origin.code, trace.rows);
 
-  const classic = await trace.check(5, "ERR_WEBAUTHN_INVALID", () => verifyAuthentication(device, assertion, challenge));
+  const classic = await trace.check(5, "ERR_WEBAUTHN_INVALID", () => verifyAuthentication(device, assertion, challenge, context.targetUrl));
   if (!classic.ok && !diff && !simulation) return failure(classic.code, trace.rows);
   if (simulation && !diff) {
     Object.assign(trace.rows[4], { passed: false, outcome: "COMPROMISED",
@@ -148,11 +149,12 @@ async function verifyHybrid(context: VerificationContext, packet: SignedPacket, 
       pqSignatureBytesLength: postQuantum.value.length, pqSignatureBase64: packet.pqSignatureBase64,
       verifyTimeMs: performance.now() - started,
     };
+    const applyPolicy = context.preparePolicy(record);
     requireTx(unit.consumeNonce(record.id, role), "ERR_REPLAY_DETECTED");
     applyPolicy(signature);
     device.webAuthnCounter = classic.value.newCounter;
   });
-  if (!gate.ok) return failure(gate.code, trace.rows);
+  if (!gate.ok) return failure(gate.code, trace.rows, gate.message);
   trace.rows[6].details = record.status === "PENDING_COSIGN" ? "Запрошена вторая подпись" : "Операция исполнена";
   return { ok: true as const, transaction: record, verificationTrace: trace.rows };
 }

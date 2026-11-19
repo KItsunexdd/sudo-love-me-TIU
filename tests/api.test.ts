@@ -31,7 +31,7 @@ const high = { ...low, ...recipientPresets.unknown, simulatedContext: { activeUn
 
 function req(path: string, body?: unknown, headers?: Record<string, string>, origin = bank) {
   return new Request(origin + "/api/" + path, body === undefined ? { headers } : {
-    method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body),
+    method: "POST", headers: { "Sec-Fetch-Site": "same-origin", "Content-Type": "application/json", ...headers }, body: JSON.stringify(body),
   });
 }
 
@@ -106,7 +106,7 @@ describe("REST §7", () => {
 
     const report = await read(soc(req("soc/events", undefined, undefined, other)));
     expect(report.aggregates).toMatchObject({
-      signedWithoutSms: 1, attacksBlocked: 4, savedAmountTenge: 60_000,
+      signedWithoutSms: 1, attacksBlocked: 4, savedAmountTenge: 15_000, attackedAmountTenge: 60_000, preventedTamperAmountTenge: 16_000,
       blockedByType: { MITM_AMOUNT: 1, REPLAY: 1, PHISHING_ORIGIN: 2 },
     });
     for (const metric of [report.aggregates.verification.mlDsa, report.aggregates.verification.webAuthn]) {
@@ -134,7 +134,7 @@ describe("REST §7", () => {
     const prepared = await read(cosignPrepare(req("transactions/cosign/prepare", context)));
     let expectedStatus: string;
     if (decision === "submit") {
-      await read(revoke(new Request(bank + "/api/devices?id=" + sender.deviceId, { method: "DELETE" })));
+      await read(revoke(new Request(bank + "/api/devices?id=" + sender.deviceId, { method: "DELETE", headers: { Origin: bank, "Content-Type": "application/json" } })));
       const message = cosignMessage(hexToBytes(prepared.txHashHex), fromBase64(packet.pqSignatureBase64));
       const second = { txId, deviceId: son.deviceId, webAuthnAssertion: await assertSoftware(son.credential, prepared.webAuthnOptions),
         pqSignatureBase64: toBase64(sign(message, son.pq.secretKey)) };
@@ -193,15 +193,15 @@ describe("REST §7", () => {
     const { devices: list } = await read(devices(req("devices?userId=" + aigul)));
     expect(list).toHaveLength(1);
     const url = bank + "/api/devices?id=" + list[0].id;
-    await read(revoke(new Request(url, { method: "DELETE" })));
-    await read(revoke(new Request(url, { method: "DELETE" })), 404);
+    await read(revoke(new Request(url, { method: "DELETE", headers: { Origin: bank, "Content-Type": "application/json" } })));
+    await read(revoke(new Request(url, { method: "DELETE", headers: { Origin: bank, "Content-Type": "application/json" } })), 404);
     expect((await read(prepare(req("transactions/prepare", low)), 404)).failureCode).toBe("ERR_DEVICE_NOT_FOUND");
   });
 
   it("после перевыпуска принимает подпись нового устройства и отклоняет ранее подготовленную со старого", async () => {
     const old = await enroll(aigul);
     const outstanding = await primary(old);
-    await read(revoke(new Request(bank + "/api/devices?id=" + old.deviceId, { method: "DELETE" })));
+    await read(revoke(new Request(bank + "/api/devices?id=" + old.deviceId, { method: "DELETE", headers: { Origin: bank, "Content-Type": "application/json" } })));
     const replacement = await enroll(aigul);
     expect(replacement.deviceId).not.toBe(old.deviceId);
     expect((await read(execute(req("transactions/execute", outstanding)), 403)).failureCode).toBe("ERR_DEVICE_NOT_ALLOWED");
@@ -241,7 +241,7 @@ describe("REST §7", () => {
   it("возвращает JSON для ошибок запроса, отсутствующих записей и отказа хранилища", async () => {
     const missing = { id: "absent" };
     await read(transaction(req("transactions/absent"), { params: Promise.resolve(missing) }), 404);
-    const malformed = new Request(bank + "/api/demo/reset", { method: "POST", body: "{" });
+    const malformed = new Request(bank + "/api/demo/reset", { method: "POST", headers: { Origin: bank, "Content-Type": "application/json" }, body: "{" });
     for (const response of [reset(malformed), reset(req("demo/reset", {})), devices(req("devices")),
       transactions(req("transactions?status=bad")), stream(req("events/stream?channel=bad")), poll(req("events/poll?since=bad"))]) {
       expect(await read(response, 400)).toEqual({ status: "ERROR", failureCode: "ERR_INVALID_INPUT", message: expect.any(String) });

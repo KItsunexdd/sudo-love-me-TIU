@@ -255,6 +255,7 @@ describe("AUDIT-02: Pre-Auth сжигание nonce и состояние тра
     const { packet } = await signPrimary(mediumInput);
     const first = await service.execute({ ...packet, acknowledgedWarning: false });
     expect(first).toMatchObject({ ok: false, failureCode: "ERR_ACK_REQUIRED" });
+    expect(first.verificationTrace.map(step => step.outcome)).toEqual(["PASS", "PASS", "PASS", "PASS", "PASS", "PASS", "FAIL"]);
 
     const snap = await storage.snapshot();
     expect(snap.transactions[0]).toMatchObject({ status: "CHALLENGE_ISSUED", nonceUsed: false });

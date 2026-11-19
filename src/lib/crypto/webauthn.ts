@@ -8,11 +8,13 @@ import { bytesToHex, fromBase64, fromBase64Url, sha256, toBase64Url, utf8 } from
 import { isValidPqPublicKey, pqProofMessage, verify } from "./mldsa";
 import { requireTx, TxError } from "@/lib/tx/errors";
 
-export function relyingParty() {
+export function relyingParty(targetUrl = "http://localhost:3000") {
+  const local = new URL(targetUrl);
+  local.hostname = "localhost";
   return {
     rpName: "BCC SafeSign",
     rpId: process.env.SAFESIGN_RP_ID ?? "localhost",
-    expectedOrigin: process.env.SAFESIGN_ORIGIN ?? "http://localhost:3000",
+    expectedOrigin: process.env.SAFESIGN_ORIGIN ?? local.origin,
   };
 }
 
@@ -34,9 +36,9 @@ export function registrationOptions(user: User, devices: RegisteredDevice[] = []
 // expectedChallenge and user must come from the same server-side registration ceremony.
 export async function verifyRegistration(input: {
   user: User; deviceName: string; deviceKind: DeviceKind; expectedChallenge: string;
-  response: RegistrationResponseJSON; pqPublicKeyBase64: string; pqProofOfPossessionBase64: string;
+  targetUrl?: string; response: RegistrationResponseJSON; pqPublicKeyBase64: string; pqProofOfPossessionBase64: string;
 }): Promise<RegisteredDevice> {
-  const { rpId, expectedOrigin } = relyingParty();
+  const { rpId, expectedOrigin } = relyingParty(input.targetUrl);
   let publicKey: Uint8Array;
   let proof: Uint8Array;
   try {
@@ -72,8 +74,8 @@ export function authenticationOptions(userId: string, devices: RegisteredDevice[
   });
 }
 
-export async function verifyAuthentication(device: RegisteredDevice, response: AuthenticationResponseJSON, expectedChallenge: string) {
-  const { rpId, expectedOrigin } = relyingParty();
+export async function verifyAuthentication(device: RegisteredDevice, response: AuthenticationResponseJSON, expectedChallenge: string, targetUrl?: string) {
+  const { rpId, expectedOrigin } = relyingParty(targetUrl);
   if (device.credentialId !== response.id || device.rpId !== rpId) throw new Error("Ключ не принадлежит устройству");
   const result = await verifyAuthenticationResponse({
     response, expectedChallenge, expectedOrigin, expectedRPID: rpId, requireUserVerification: true,

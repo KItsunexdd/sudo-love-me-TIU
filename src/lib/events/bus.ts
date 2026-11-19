@@ -1,13 +1,6 @@
-import type { SecurityEvent, TxStatus } from "@/lib/db/types";
+import { matches, type DemoEvent, type EventFilter } from "./filter";
+export type { DemoEvent, EventFilter } from "./filter";
 
-interface Participants { senderId?: string; cosignerUserId?: string }
-export type DemoEvent =
-  | { type: "COSIGN_REQUESTED"; txId: string; cosignerUserId: string }
-  | ({ type: "TX_UPDATED"; txId: string; status: TxStatus } & Participants)
-  | ({ type: "SECURITY_ALERT"; event: SecurityEvent } & Participants)
-  | { type: "DEMO_RESET"; keepDevices: boolean };
-
-export interface EventFilter { userId?: string; channel?: "cosign" | "soc" }
 type Listener = (event: DemoEvent, cursor: number) => void;
 const runtime = globalThis as typeof globalThis & {
   safeSignListeners?: Set<Listener>;
@@ -37,15 +30,6 @@ export function publish(event: DemoEvent) {
       listeners.delete(listener);
     }
   }
-}
-
-export function matches(event: DemoEvent, { userId, channel }: EventFilter) {
-  if (event.type === "DEMO_RESET") return true;
-  if (userId && userId !== event.cosignerUserId && !("senderId" in event && event.senderId === userId)) return false;
-  if (channel === "soc") return event.type !== "COSIGN_REQUESTED";
-  if (channel === "cosign") return event.type === "COSIGN_REQUESTED" ||
-    (event.type === "TX_UPDATED" && Boolean(event.cosignerUserId) && event.status !== "CHALLENGE_ISSUED");
-  return true;
 }
 
 export const currentCursor = () => journal.cursor;

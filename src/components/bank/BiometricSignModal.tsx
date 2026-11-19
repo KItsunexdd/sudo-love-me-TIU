@@ -77,9 +77,9 @@ function LockTile({
   );
 }
 
-export function BiometricSignModal({ prepared, device, onClose, onComplete, onFallback }: {
+export function BiometricSignModal({ prepared, device, onClose, onComplete, onFallback, onRenew }: {
   prepared: PrepareResponse; device: LocalDevice; onClose: () => void;
-  onComplete: (result: ApiResult<ExecuteResponse>) => void; onFallback: () => void;
+  onComplete: (result: ApiResult<ExecuteResponse>) => void; onFallback: () => void; onRenew: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState<SignStage>("review");
@@ -178,14 +178,14 @@ export function BiometricSignModal({ prepared, device, onClose, onComplete, onFa
           </span>
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="ghost" onClick={onClose} disabled={busy}>Отмена</Button>
-            <Button
-              disabled={!remaining || (risk.requiresAcknowledgement && !ack)}
+            {!remaining ? <Button onClick={onRenew} disabled={busy}>Подготовить новый вызов</Button> : <Button
+              disabled={risk.requiresAcknowledgement && !ack}
               loading={busy}
               icon={<Fingerprint size={18} />}
               onClick={() => void sign()}
             >
               {software ? "Подтвердить Software Key + ML-DSA" : "Подтвердить Passkey + ML-DSA"}
-            </Button>
+            </Button>}
           </div>
         </div>
       }

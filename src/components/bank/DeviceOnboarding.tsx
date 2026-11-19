@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Fingerprint } from "lucide-react";
 import { Button, ErrorCard, Modal, SegmentedControl } from "@/components/ui";
 import type { ApiError } from "@/lib/client/api";
@@ -9,8 +9,11 @@ import { registerDevice, toClientError } from "@/lib/client/signer";
 export function DeviceOnboarding({ userId, software, onClose }: { userId: string; software: boolean; onClose: () => void }) {
   const [choice, setChoice] = useState(software ? "software" : "passkey");
   const [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
   const [error, setError] = useState<ApiError>();
   async function register() {
+    if (submitting.current) return;
+    submitting.current = true;
     setError(undefined);
     setBusy(true);
     try {
@@ -18,7 +21,10 @@ export function DeviceOnboarding({ userId, software, onClose }: { userId: string
       onClose();
     } catch (cause) {
       setError(toClientError(cause));
-    } finally { setBusy(false); }
+    } finally {
+      submitting.current = false;
+      setBusy(false);
+    }
   }
   return <Modal open onClose={onClose} dismissible={!busy} title="Привязать устройство" description="Выберите ключ для подтверждения операций."
     footer={<Button loading={busy} icon={<Fingerprint size={18} />} onClick={() => void register()}>Привязать устройство</Button>}>

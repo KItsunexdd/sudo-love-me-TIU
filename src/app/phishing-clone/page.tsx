@@ -12,5 +12,5 @@ export const metadata: Metadata = {
 };
 
 export default function BonusPage() {
-  return <OriginCheck rpId={process.env.SAFESIGN_RP_ID ?? "localhost"} bankOrigin={process.env.SAFESIGN_ORIGIN ?? "http://localhost:3000"} />;
+  return <OriginCheck rpId={process.env.SAFESIGN_RP_ID ?? "localhost"} bankOrigin={process.env.SAFESIGN_ORIGIN} />;
 }

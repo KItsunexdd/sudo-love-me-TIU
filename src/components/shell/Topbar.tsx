@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Fingerprint, Menu, RotateCcw, ShieldCheck, Zap } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, type ApiError } from "@/lib/client/api";
-import { clearLocalDevices, type LocalDevice } from "@/lib/client/client-keystore";
+import { removeRevokedLocalDevices, type LocalDevice } from "@/lib/client/client-keystore";
 import { useEventStream, type ConnectionStatus } from "@/lib/client/useEventStream";
 import { useLocalDevices } from "@/lib/client/useLocalDevices";
 import type { Mode } from "@/lib/db/types";
@@ -40,6 +40,7 @@ const sseMeta: Record<ConnectionStatus, { tone: BadgeTone; label: string; pulse:
 function ResetDemoModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [keepDevices, setKeepDevices] = useState(true);
   const [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
   const [error, setError] = useState<ApiError | null>(null);
   const { toast } = useToast();
 
@@ -50,6 +51,8 @@ function ResetDemoModal({ open, onClose }: { open: boolean; onClose: () => void 
   }
 
   async function reset() {
+    if (submitting.current) return;
+    submitting.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -60,7 +63,7 @@ function ResetDemoModal({ open, onClose }: { open: boolean; onClose: () => void 
       }
       if (!keepDevices) {
         try {
-          await clearLocalDevices();
+          await removeRevokedLocalDevices();
         } catch {
           setError({
             status: "ERROR", failureCode: "ERR_CLIENT_KEYSTORE",
@@ -72,6 +75,7 @@ function ResetDemoModal({ open, onClose }: { open: boolean; onClose: () => void 
       close();
       toast({ title: "Демо сброшено", description: "Балансы и журнал возвращены к исходному состоянию.", tone: "success" });
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   }
@@ -98,6 +102,7 @@ function DeviceModal({ open, onClose, userId, device }: {
 }) {
   const [preferSoftware, setPreferSoftware] = useState(false);
   const [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
   const [error, setError] = useState<ApiError | null>(null);
   const { toast } = useToast();
 
@@ -108,6 +113,8 @@ function DeviceModal({ open, onClose, userId, device }: {
   }
 
   async function register() {
+    if (submitting.current) return;
+    submitting.current = true;
     setError(null);
     setBusy(true);
     try {
@@ -126,6 +133,7 @@ function DeviceModal({ open, onClose, userId, device }: {
     } catch {
       setError({ status: "ERROR", failureCode: "ERR_CLIENT", message: "Не удалось загрузить модуль подписи." });
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   }
@@ -171,7 +179,8 @@ function usePendingCount(cosignerId: string, lastEventId: number | undefined, sy
 }
 
 function CosignTopbar({ pathname }: { pathname: string }) {
-  const { mode, setMode, cosignerId } = useDemoMode();
+  const { mode, setMode, cosignerId: defaultCosigner } = useDemoMode();
+  const cosignerId = useSearchParams().get("userId")?.trim() || defaultCosigner;
   const { status, lastEvent, syncVersion, resyncVersion } = useEventStream({ channel: "cosign", userId: cosignerId });
   const pendingCount = usePendingCount(cosignerId, lastEvent?.id, syncVersion, resyncVersion);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -294,9 +303,9 @@ export function Topbar() {
 
 function BankTopbar({ pathname }: { pathname: string }) {
   const { mode, setMode, senderId, cosignerId } = useDemoMode();
-  const { lastEvent, syncVersion, resyncVersion } = useEventStream();
+  const { events, lastEvent, syncVersion, resyncVersion } = useEventStream({ userId: senderId });
   const { devices, loading: devicesLoading } = useLocalDevices();
-  const resetEvent = lastEvent?.type === "DEMO_RESET" ? lastEvent.id : undefined;
+  const resetEvent = events.findLast(event => event.type === "DEMO_RESET")?.id;
   const [activeIds, setActiveIds] = useState<string[] | null>(null);
   const pendingCount = usePendingCount(cosignerId, lastEvent?.id, syncVersion, resyncVersion);
   const [open, setOpen] = useState<"device" | "reset" | null>(null);

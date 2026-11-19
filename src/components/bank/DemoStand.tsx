@@ -120,14 +120,17 @@ function DemoSession({ sender, cosigner, mode, presets, refresh }: StandProps) {
   const [inspector, setInspector] = useState<string | null>(null);
   const [quantum, setQuantum] = useState(false);
   const { devices, unavailable, loading } = useLocalDevices();
-  const { status, syncVersion, resyncVersion } = useEventStream();
+  const { status, syncVersion, resyncVersion } = useEventStream({ userId: sender.id });
   const [activeIds, setActiveIds] = useState<string[]>();
   const [deviceError, setDeviceError] = useState<ApiError>();
   const [deviceRevision, setDeviceRevision] = useState(0);
   const [time, setTime] = useState(Date.now);
-  const live = useTransaction(attempt?.id ?? null);
+  const live = useTransaction(attempt?.id ?? null, sender.id);
   const record = live.record ?? attempt?.record;
   const mounted = useRef(false);
+  const preparing = useRef(false);
+  const interacted = useRef(false);
+  const lastInput = useRef<PrepareInput | null>(null);
   const device = devices.filter(item => item.userId === sender.id && activeIds?.includes(item.id))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
   const signingDevice = devices.find(item => item.id === signerId);
@@ -158,26 +161,53 @@ function DemoSession({ sender, cosigner, mode, presets, refresh }: StandProps) {
     return () => controller.abort();
   }, [sender.id, devices, syncVersion, resyncVersion, deviceRevision]);
 
+  useEffect(() => {
+    if (interacted.current) return;
+    const controller = new AbortController();
+    void api.listTransactions({ status: "PENDING_COSIGN", userId: sender.id }, controller.signal).then(result => {
+      if (controller.signal.aborted || interacted.current) return;
+      if (!result.ok) { setPrepareError(result.error); return; }
+      const pending = result.data.transactions.filter(tx => tx.payload.senderId === sender.id)
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+      if (pending) {
+        setAttempt({ id: pending.id, record: pending, http: 202 });
+        setReceipt(true);
+        setTab("cosign");
+        interacted.current = true;
+      }
+    });
+    return () => controller.abort();
+  }, [sender.id, syncVersion, resyncVersion]);
+
   function newForm(preset: PresetName) {
+    interacted.current = true;
     setReceipt(false);
     setPrepareError(undefined);
     setForm(previous => ({ key: previous.key + 1, preset }));
   }
 
   async function prepare(input: PrepareInput) {
-    if (busy || !device) return;
+    if (preparing.current || !device) return;
+    preparing.current = true;
+    interacted.current = true;
+    lastInput.current = input;
     setBusy(true);
     setPrepareError(undefined);
-    const result = await api.prepare(input);
-    if (!mounted.current) return;
-    if (result.ok) {
-      setSignerId(device.id);
-      setPrepared(result.data);
-    } else setPrepareError(result.error);
-    setBusy(false);
+    try {
+      const result = await api.prepare(input);
+      if (!mounted.current) return;
+      if (result.ok) {
+        setSignerId(device.id);
+        setPrepared(result.data);
+      } else setPrepareError(result.error);
+    } finally {
+      preparing.current = false;
+      if (mounted.current) setBusy(false);
+    }
   }
 
   function complete(id: string, result: ApiResult<ExecuteResponse>) {
+    interacted.current = true;
     setAttempt(result.ok ? { id, http: result.status, record: result.data.transaction } :
       { id, http: result.status, error: result.error });
     setPrepared(null);
@@ -308,6 +338,11 @@ function DemoSession({ sender, cosigner, mode, presets, refresh }: StandProps) {
       {deviceDialog && <DeviceOnboarding userId={sender.id} software={deviceDialog === "software"} onClose={() => setDeviceDialog(null)} />}
       {prepared && signingDevice && (
         <BiometricSignModal
+          key={prepared.txId}
+          onRenew={() => {
+            setPrepared(null);
+            if (lastInput.current) void prepare(lastInput.current);
+          }}
           prepared={prepared}
           device={signingDevice}
           onClose={() => setPrepared(null)}
@@ -315,7 +350,7 @@ function DemoSession({ sender, cosigner, mode, presets, refresh }: StandProps) {
           onFallback={() => { setPrepared(null); setDeviceDialog("software"); }}
         />
       )}
-      {inspector && <CryptoInspectorDrawer txId={inspector} onClose={() => inspect(null)} onQuantum={openQuantum} />}
+      {inspector && <CryptoInspectorDrawer userId={sender.id} txId={inspector} onClose={() => inspect(null)} onQuantum={openQuantum} />}
       {quantum && <QuantumCompareModal sample={sample} deviceId={device?.id} onClose={() => setQuantum(false)} onInspect={inspect} onResult={complete} />}
     </main>
   );
@@ -323,8 +358,8 @@ function DemoSession({ sender, cosigner, mode, presets, refresh }: StandProps) {
 
 export function DemoStand() {
   const { mode, senderId, cosignerId } = useDemoMode();
-  const { users, loading, recipientPresets, error, refresh } = useDemoState();
-  const { events } = useEventStream();
+  const { users, loading, recipientPresets, error, refresh } = useDemoState(senderId);
+  const { events } = useEventStream({ userId: senderId });
   const latestReset = events.findLast(event => event.type === "DEMO_RESET")?.id;
   const [reset, setReset] = useState(0);
   useEffect(() => { if (latestReset) { setReset(latestReset); resetAttackState(); } }, [latestReset]);

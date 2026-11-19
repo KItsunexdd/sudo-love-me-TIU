@@ -8,6 +8,9 @@ import "./globals.css";
 const inter = Inter({ weight: "variable", subsets: ["latin", "cyrillic"], display: "swap", variable: "--font-inter" });
 const jetBrainsMono = JetBrains_Mono({ weight: "variable", subsets: ["latin", "cyrillic"], display: "swap", variable: "--font-jetbrains-mono" });
 
+// Render HTML per request so Next can attach the matching CSP nonce.
+export const dynamic = "force-dynamic";
+
 export const viewport: Viewport = {
   themeColor: "#07110E",
   colorScheme: "dark",

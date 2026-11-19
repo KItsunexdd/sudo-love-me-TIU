@@ -3,6 +3,7 @@
 import { motion, useReducedMotion } from "framer-motion";
 import { Microscope, RotateCcw, ShieldAlert } from "lucide-react";
 import type { ApiError } from "@/lib/client/api";
+import { escapeDisplayControls } from "@/lib/crypto/canonical";
 import type { TamperDiff } from "@/lib/db/types";
 import { formatIban, formatMs, formatTenge } from "@/lib/ui/format";
 import { attackShieldVariants, reducedMotionVariants } from "@/lib/ui/motion";
@@ -66,12 +67,12 @@ export function AttackBlockedShield({ error, httpStatus, durationMs, onInspect, 
         <div className="rounded-xl border border-danger/45 bg-terminal/90 px-3.5 py-2.5 text-sm leading-snug">
           <span className="text-ink-secondary">Клиент подписал: </span>
           <strong className={`${headline.mono ? "font-mono" : ""} font-bold tabular-nums text-bcc`}>
-            {headline.original}
+            {escapeDisplayControls(headline.original)}
           </strong>
           <span className="mx-1.5 text-ink-muted">·</span>
           <span className="text-ink-secondary">Сервер получил: </span>
           <strong className={`${headline.mono ? "font-mono" : ""} font-bold tabular-nums text-danger-text`}>
-            {headline.tampered}
+            {escapeDisplayControls(headline.tampered)}
           </strong>
         </div>
       )}

@@ -1,7 +1,9 @@
 "use client";
 
-import { useCallback, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { api, eventStreamUrl, type DemoEvent, type EventFilter } from "./api";
+
+import { matches } from "@/lib/events/filter";
 
 export type StreamEvent = DemoEvent & { id: number };
 export type ConnectionStatus = "connecting" | "live" | "polling" | "offline";
@@ -151,51 +153,67 @@ function connect(filter: EventFilter, set: (update: (previous: Snapshot) => Snap
   return () => {
     lifetime.abort();
     source?.close();
+    source = undefined;
     clearTimeout(reconnect);
     clearTimeout(handshake);
     clearInterval(interval);
   };
 }
 
-// Identical filters share a connection, including the shell and any mounted demo screen.
-function createStore(filter: EventFilter, dispose: () => void) {
-  let snapshot = initial;
-  let stop: (() => void) | undefined;
-  const listeners = new Set<Listener>();
-  return {
-    getSnapshot: () => snapshot,
-    subscribe(listener: Listener) {
-      listeners.add(listener);
-      stop ??= connect(filter, update => {
-        const next = update(snapshot);
-        if (next === snapshot) return;
-        snapshot = next;
-        listeners.forEach(notify => notify());
-      });
-      return () => {
-        listeners.delete(listener);
-        if (listeners.size) return;
-        stop?.();
-        stop = undefined;
-        snapshot = initial;
-        dispose();
-      };
-    },
-  };
-}
-
-const stores = new Map<string, ReturnType<typeof createStore>>();
+let snapshot = initial;
+let stopConnection: (() => void) | undefined;
+const listeners = new Set<Listener>();
 const serverSnapshot = () => initial;
 
-export function useEventStream({ userId, channel }: EventFilter = {}) {
-  const key = eventStreamUrl({ userId, channel });
-  const subscribe = useCallback((listener: Listener) => {
-    let store = stores.get(key);
-    if (!store) {
-      store = createStore({ userId, channel }, () => stores.delete(key));
-      stores.set(key, store);
-    }
-    return store.subscribe(listener);
-  }, [key, userId, channel]);
-  return useSyncExternalStore(subscribe, () => stores.get(key)?.getSnapshot() ?? initial, serverSnapshot);
+function updateSnapshot(next: Snapshot) {
+  if (next === snapshot) return;
+  snapshot = next;
+  listeners.forEach(notify => notify());
+}
+
+// One transport per tab. Changing the page or persona closes the old scope first.
+export const tabEvents = {
+  open(scope: EventFilter) {
+    stopConnection?.();
+    updateSnapshot(initial);
+    const stop = connect(scope, fn => updateSnapshot(fn(snapshot)));
+    stopConnection = stop;
+    return () => {
+      if (stopConnection !== stop) return;
+      stop();
+      stopConnection = undefined;
+      updateSnapshot(initial);
+    };
+  },
+  subscribe(listener: Listener) {
+    listeners.add(listener);
+    return () => { listeners.delete(listener); };
+  },
+  select(filter: EventFilter) {
+    let previous = initial;
+    let source: Snapshot | undefined;
+    return () => {
+      if (source === snapshot) return previous;
+      source = snapshot;
+      const filtered = snapshot.events.filter(event => matches(event, filter));
+      const events = filtered.length === previous.events.length && filtered.every((event, i) => event === previous.events[i])
+        ? previous.events : filtered;
+      if (events !== previous.events || snapshot.status !== previous.status ||
+          snapshot.syncVersion !== previous.syncVersion || snapshot.resyncVersion !== previous.resyncVersion) {
+        previous = { ...snapshot, events, lastEvent: events.at(-1) ?? null };
+      }
+      return previous;
+    };
+  },
+};
+
+export function useTabEventConnection({ userId, channel }: EventFilter, enabled: boolean) {
+  useEffect(() => {
+    if (enabled) return tabEvents.open({ userId, channel });
+  }, [userId, channel, enabled]);
+}
+
+export function useEventStream({ userId, channel }: EventFilter) {
+  const select = useMemo(() => tabEvents.select({ userId, channel }), [userId, channel]);
+  return useSyncExternalStore(tabEvents.subscribe, select, serverSnapshot);
 }

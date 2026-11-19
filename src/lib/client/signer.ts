@@ -29,10 +29,6 @@ export function toClientError(error: unknown): ApiError {
 const webAuthnAvailable = () => typeof PublicKeyCredential !== "undefined" &&
   typeof navigator.credentials?.create === "function" && typeof navigator.credentials?.get === "function";
 
-function mayFallback(error: unknown) {
-  return error instanceof Error && (error.name === "NotAllowedError" || error.name === "NotSupportedError");
-}
-
 function webAuthnError(error: unknown) {
   if (error instanceof Error && (error.name === "AbortError" || error.name === "NotAllowedError")) {
     return signerError("ERR_WEBAUTHN_CANCELLED", "Подтверждение устройством отменено.", error);
@@ -63,8 +59,7 @@ function pqProofOfPossession(
 
 export async function registerDevice(userId: string, { preferSoftware = false, deviceName = "Этот браузер" } = {}) {
   await withKeystore(prepareKeystore);
-  const begin = () => api.registerOptions({ userId, deviceName });
-  let options = await begin();
+  const options = await api.registerOptions({ userId, deviceName });
   if (!options.ok) throw new SignerError(options.error);
   let attestationResponse: RegistrationResponseJSON | undefined;
   let software: SoftwareCredential | undefined;
@@ -74,10 +69,13 @@ export async function registerDevice(userId: string, { preferSoftware = false, d
     try {
       attestationResponse = await startRegistration({ optionsJSON: options.data });
     } catch (error) {
-      if (!mayFallback(error)) throw webAuthnError(error);
-      // The hardware prompt can outlive the original challenge.
-      options = await begin();
-      if (!options.ok) throw new SignerError(options.error);
+      if (error instanceof Error && ["NotAllowedError", "AbortError"].includes(error.name)) {
+        throw signerError("ERR_WEBAUTHN_CANCELLED", "Привязка отменена. Повторите Passkey или выберите Software Key.", error);
+      }
+      if (error instanceof Error && error.name === "NotSupportedError") {
+        throw signerError("ERR_WEBAUTHN_UNSUPPORTED", "Passkey недоступен. Выберите Software Key.", error);
+      }
+      throw webAuthnError(error);
     }
   }
   if (!attestationResponse) {
