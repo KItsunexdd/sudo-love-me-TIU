@@ -28,6 +28,7 @@ const assertionSchema = z.object({
   }),
 });
 const signedFields = {
+  clientTimings: z.object({ webauthnMs: z.number().nonnegative(), pqSignMs: z.number().nonnegative() }).optional(),
   txId: text, deviceId: text, webAuthnAssertion: assertionSchema, pqSignatureBase64: z.string().min(1).max(6000),
 };
 

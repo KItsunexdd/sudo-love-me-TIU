@@ -150,6 +150,10 @@ function DeviceModal({ open, onClose, userId, device }: {
 
 export function Topbar() {
   const pathname = usePathname();
+  return pathname === "/phishing-clone" ? null : <BankTopbar pathname={pathname} />;
+}
+
+function BankTopbar({ pathname }: { pathname: string }) {
   const { mode, setMode, senderId, cosignerId } = useDemoMode();
   const { lastEvent, syncVersion, resyncVersion } = useEventStream();
   const { devices, loading: devicesLoading } = useLocalDevices();

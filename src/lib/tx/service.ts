@@ -1,6 +1,6 @@
 import type { z } from "zod";
 import { hexToBytes, randomBytes } from "@noble/hashes/utils.js";
-import { bytesToHex, fromBase64, hashPayload, sha256 } from "@/lib/crypto/canonical";
+import { bytesToHex, fromBase64, fromBase64Url, hashPayload, sha256 } from "@/lib/crypto/canonical";
 import { cosignChallenge } from "@/lib/crypto/mldsa";
 import { authenticationOptions, relyingParty } from "@/lib/crypto/webauthn";
 import { isExpired, verifyCosign, verifyPrimary, type PrimaryPacket, type SignedPacket } from "@/lib/crypto/hybrid-verifier";
@@ -105,7 +105,21 @@ const alertType: Partial<Record<FailureCode, SecurityEvent["eventType"]>> = {
   ERR_WEBAUTHN_INVALID: "WEBAUTHN_REJECTED",
 };
 
-function recordFailure(unit: UnitOfWork, tx: TransactionRecord, role: SigningRole, result: Failure, now: Date, details: Record<string, unknown>) {
+function rejectedEvidence(packet: SignedPacket): NonNullable<TransactionRecord["rejectedEvidence"]> {
+  const evidence: NonNullable<TransactionRecord["rejectedEvidence"]> = { clientTimings: packet.clientTimings };
+  // Malformed encodings are valid rejection cases. Preserve the verifier's original verdict.
+  try {
+    evidence.clientDataJson = new TextDecoder().decode(fromBase64Url(packet.webAuthnAssertion.response.clientDataJSON));
+  } catch { /* No decodable clientDataJSON. */ }
+  try {
+    const bytes = fromBase64(packet.pqSignatureBase64);
+    evidence.pqBytes = bytes.length;
+    evidence.pqHexPreview = bytesToHex(bytes.subarray(0, 32));
+  } catch { /* No decodable signature bytes. */ }
+  return evidence;
+}
+
+function recordFailure(unit: UnitOfWork, tx: TransactionRecord, role: SigningRole, result: Failure, now: Date, details: Record<string, unknown>, packet: SignedPacket) {
   const rejection = { ...details, failureCode: result.failureCode, verificationTrace: result.verificationTrace, tamperDiff: result.tamperDiff };
   if (result.failureCode === "ERR_TX_EXPIRED" && tx.status !== "EXPIRED") {
     tx.verificationTrace = result.verificationTrace;
@@ -114,6 +128,7 @@ function recordFailure(unit: UnitOfWork, tx: TransactionRecord, role: SigningRol
   }
   // Only the attempt which actually claimed this role's nonce may close its transaction.
   if (isCryptoFailure(result.failureCode) && unit.consumeNonce(tx.id, role)) {
+    tx.rejectedEvidence = rejectedEvidence(packet);
     tx.verificationTrace = result.verificationTrace;
     tx.tamperDiff = result.tamperDiff;
     tx.failureCode = result.failureCode;
@@ -232,7 +247,7 @@ export class TransactionService {
     const details = attempt.primary && attempt.packet.attackTag ? { attackTag: attempt.packet.attackTag } : {};
     if (!result.ok) {
       const tx = unit.db.transactions.find(t => t.id === attempt.packet.txId);
-      if (tx) recordFailure(unit, tx, attempt.primary ? "primary" : "cosign", result, timestamp, details);
+      if (tx) recordFailure(unit, tx, attempt.primary ? "primary" : "cosign", result, timestamp, details, attempt.packet);
       else audit(unit, { id: attempt.packet.txId }, timestamp, "TX_POLICY_REJECTED", "WARNING", result.message,
         { ...details, failureCode: result.failureCode, verificationTrace: result.verificationTrace });
       return result;

@@ -180,6 +180,11 @@ describe("Гибридная проверка и атомарное исполн
     const result = await service.execute({ ...packet, pqSignatureBase64: toBase64(sig), quantumSimulation });
     expect(result).toMatchObject({ failureCode: "ERR_PQ_SIGNATURE_INVALID" });
     expect(result.verificationTrace.slice(4).map(s => s.outcome)).toEqual([quantumSimulation ? "COMPROMISED" : "PASS", "FAIL", "SKIPPED"]);
+    const stored = await service.getTransaction(packet.txId);
+    expect(stored).toMatchObject({ transaction: { rejectedEvidence: {
+      pqBytes: sig.length, pqHexPreview: bytesToHex(sig.subarray(0, 32)),
+      clientDataJson: new TextDecoder().decode(fromBase64Url(packet.webAuthnAssertion.response.clientDataJSON)),
+    } } });
   });
   it("диагностический режим с подлинными ключами исключает списание", async () => {
     const { packet } = await preparePrimary();

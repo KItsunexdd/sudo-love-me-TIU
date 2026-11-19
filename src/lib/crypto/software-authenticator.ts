@@ -69,14 +69,18 @@ function derInteger(raw: Uint8Array) {
   return concatBytes(Uint8Array.of(2, positive.length), positive);
 }
 
+/**
+ * `originOverride` lets the demo's attack panel produce the assertion a cloned site on another
+ * origin would produce. The server must reject it at step 4 (ERR_ORIGIN_MISMATCH).
+ */
 export async function assertSoftware(credential: SoftwareCredential,
-  options: PublicKeyCredentialRequestOptionsJSON): Promise<AuthenticationResponseJSON> {
-  if (credential.origin !== currentOrigin() || options.rpId !== credential.rpId ||
+  options: PublicKeyCredentialRequestOptionsJSON, { originOverride }: { originOverride?: string } = {}): Promise<AuthenticationResponseJSON> {
+  if ((!originOverride && credential.origin !== currentOrigin()) || options.rpId !== credential.rpId ||
       (options.allowCredentials?.length && !options.allowCredentials.some(d => d.id === credential.id))) {
     throw new Error("Программный ключ недоступен для этого домена или операции");
   }
   if (credential.signCount >= 0xffffffff) throw new Error("Исчерпан счётчик устройства");
-  const data = clientData("webauthn.get", options.challenge, credential.origin);
+  const data = clientData("webauthn.get", options.challenge, originOverride ?? credential.origin);
   const authenticatorData = authData(credential.rpId, 0x05, ++credential.signCount);
   const raw = new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" },
     credential.privateKey, new Uint8Array(concatBytes(authenticatorData, sha256(data)))));

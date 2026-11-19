@@ -68,6 +68,7 @@ export interface VerificationStepResult {
 }
 
 export interface SignatureBundle {
+  clientTimings?: { webauthnMs: number; pqSignMs: number };
   signerUserId: string;
   deviceId: string;
   signedAt: string;
@@ -125,6 +126,12 @@ export interface TransactionRecord {
   cosignerUserId?: string;
   primarySignature?: SignatureBundle;
   cosignSignature?: SignatureBundle;
+  rejectedEvidence?: {
+    clientDataJson?: string;
+    pqBytes?: number;
+    pqHexPreview?: string;
+    clientTimings?: SignatureBundle["clientTimings"];
+  };
   verificationTrace: VerificationStepResult[];
   primaryTrace?: VerificationStepResult[];
   failureCode?: FailureCode;

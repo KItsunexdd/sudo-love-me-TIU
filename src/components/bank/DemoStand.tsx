@@ -1,0 +1,185 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { CircleDot, Landmark, ShieldCheck, Snowflake, Users } from "lucide-react";
+import { useDemoMode } from "@/components/shell/DemoModeProvider";
+import { CosignEmbedSlot } from "@/components/cosign/CosignEmbedSlot";
+import { CryptoInspectorDrawer } from "@/components/crypto/CryptoInspectorDrawer";
+import { useTransaction } from "@/components/crypto/useTransaction";
+import { AttackSimulatorPanel } from "@/components/hacker/AttackSimulatorPanel";
+import { resetAttackState } from "@/components/hacker/attacks";
+import { QuantumCompareModal } from "@/components/hacker/QuantumCompareModal";
+import { Button, Card, ErrorCard, PhoneFrame, SegmentedControl, Spinner } from "@/components/ui";
+import { api, type ApiError, type ApiResult, type DemoUsersResponse, type ExecuteResponse, type PrepareInput, type PrepareResponse } from "@/lib/client/api";
+import { useDemoState } from "@/lib/client/useDemoState";
+import { useEventStream } from "@/lib/client/useEventStream";
+import { useLocalDevices } from "@/lib/client/useLocalDevices";
+import type { Mode, TransactionRecord, User } from "@/lib/db/types";
+import { formatIban, formatTenge } from "@/lib/ui/format";
+import { BiometricSignModal } from "./BiometricSignModal";
+import { DeviceOnboarding } from "./DeviceOnboarding";
+import { TransactionResult } from "./TransactionResult";
+import { TransferForm, type PresetName } from "./TransferForm";
+
+type Attempt = { id: string; record?: TransactionRecord; error?: ApiError; http: number };
+type StandProps = {
+  sender: DemoUsersResponse["users"][number]; cosigner: User; mode: Mode; presets: DemoUsersResponse["recipientPresets"];
+  refresh: () => void;
+};
+
+function AccountCard({ sender, cosigner, mode }: Pick<StandProps, "sender" | "cosigner" | "mode">) {
+  const business = mode === "B2B";
+  return <section className={`relative isolate overflow-hidden rounded-2xl border border-border-strong px-4 py-3 sm:px-5
+    ${business ? "bg-[image:var(--gradient-account-card-b2b)]" : "bg-[image:var(--gradient-account-card)]"}`}>
+    <div aria-hidden="true" className="pointer-events-none absolute -right-12 -top-16 -z-10 size-56 rounded-full opacity-40 [background:repeating-radial-gradient(ellipse_at_center,transparent_0_8px,#47725f_9px,transparent_10px_16px)]" />
+    <div className="flex items-center justify-between gap-2"><div className="flex items-center gap-2"><Landmark size={16} className={business ? "text-gold" : "text-bcc"} />
+      <span className="text-sm font-semibold">{business ? "BCC Business" : "bcc.kz"}</span></div><span className="mono-data text-ink-secondary">KZT</span></div>
+    <h1 className="mt-3 type-h3">{business ? "ТОО «Алатау Логистик»" : sender.fullName}</h1>
+    {business && <p className="text-xs text-ink-secondary">Бухгалтер · {sender.fullName}</p>}
+    <p className="mt-0.5 text-[clamp(1.8rem,3vw,2.55rem)] font-bold leading-tight tracking-tight tabular-nums">{formatTenge(sender.balanceTenge)}</p>
+    <p className="mt-1 break-words font-mono text-xs tracking-wide text-ink-secondary">{formatIban(sender.accountIban)}</p>
+    <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-border-strong pt-2 text-xs text-ink-secondary">
+      <span className="flex items-center gap-1"><ShieldCheck size={14} className="text-bcc" /> {business ? "Директор" : "Вторая рука"} · {cosigner.fullName}</span>
+      {!business && <span>Депозит · {formatTenge(sender.depositBalanceTenge)}</span>}
+    </div>
+  </section>;
+}
+
+function DemoSession({ sender, cosigner, mode, presets, refresh }: StandProps) {
+  const business = mode === "B2B";
+  const [tab, setTab] = useState<"panel" | "cosign">("panel");
+  const [form, setForm] = useState<{ key: number; preset: PresetName }>({ key: 0, preset: business ? "supplier" : "son" });
+  const [deviceDialog, setDeviceDialog] = useState<"choose" | "software" | null>(null);
+  const [prepared, setPrepared] = useState<PrepareResponse | null>(null);
+  const [signerId, setSignerId] = useState("");
+  const [prepareError, setPrepareError] = useState<ApiError>();
+  const [busy, setBusy] = useState(false);
+  const [attempt, setAttempt] = useState<Attempt>();
+  const [receipt, setReceipt] = useState(false);
+  const [inspector, setInspector] = useState<string | null>(null);
+  const [quantum, setQuantum] = useState(false);
+  const { devices, unavailable, loading } = useLocalDevices();
+  const { status, syncVersion, resyncVersion } = useEventStream();
+  const [activeIds, setActiveIds] = useState<string[]>();
+  const [deviceError, setDeviceError] = useState<ApiError>();
+  const [deviceRevision, setDeviceRevision] = useState(0);
+  const [time, setTime] = useState(Date.now);
+  const live = useTransaction(attempt?.id ?? null);
+  const record = live.record ?? attempt?.record;
+  const mounted = useRef(false);
+  const device = devices.filter(item => item.userId === sender.id && activeIds?.includes(item.id))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+  const signingDevice = devices.find(item => item.id === signerId);
+  const coolingUntil = Date.parse(sender.coolingOffUntil ?? "");
+  const cooling = coolingUntil > time;
+  useEffect(() => {
+    mounted.current = true;
+    const readInspector = () => setInspector(new URL(window.location.href).searchParams.get("txId") || null);
+    readInspector();
+    window.addEventListener("popstate", readInspector);
+    return () => { mounted.current = false; window.removeEventListener("popstate", readInspector); };
+  }, []);
+  useEffect(() => {
+    if (!Number.isFinite(coolingUntil) || coolingUntil <= Date.now()) return;
+    const timer = setTimeout(() => setTime(Date.now()), coolingUntil - Date.now() + 100);
+    return () => clearTimeout(timer);
+  }, [coolingUntil]);
+  useEffect(() => {
+    const controller = new AbortController();
+    void api.listDevices(sender.id, controller.signal).then(result => {
+      if (controller.signal.aborted) return;
+      setDeviceError(result.error ?? undefined);
+      setActiveIds(result.ok ? result.data.devices.map(item => item.id) : []);
+    });
+    return () => controller.abort();
+  }, [sender.id, devices, syncVersion, resyncVersion, deviceRevision]);
+
+  function newForm(preset: PresetName) {
+    setReceipt(false);
+    setPrepareError(undefined);
+    setForm(previous => ({ key: previous.key + 1, preset }));
+  }
+  async function prepare(input: PrepareInput) {
+    if (busy || !device) return;
+    setBusy(true);
+    setPrepareError(undefined);
+    const result = await api.prepare(input);
+    if (!mounted.current) return;
+    if (result.ok) {
+      setSignerId(device.id);
+      setPrepared(result.data);
+    } else setPrepareError(result.error);
+    setBusy(false);
+  }
+  function complete(id: string, result: ApiResult<ExecuteResponse>) {
+    setAttempt(result.ok ? { id, http: result.status, record: result.data.transaction } :
+      { id, http: result.status, error: result.error });
+    setPrepared(null);
+    setReceipt(true);
+    if (result.ok && result.data.status === "PENDING_COSIGN") setTab("cosign");
+    refresh();
+  }
+  function inspect(id: string | null) {
+    const url = new URL(window.location.href);
+    if (id) url.searchParams.set("txId", id);
+    else url.searchParams.delete("txId");
+    window.history.replaceState(null, "", url);
+    setQuantum(false);
+    setInspector(id);
+  }
+  const openQuantum = () => { inspect(null); setQuantum(true); };
+  const sample: PrepareInput = { ...(business ? presets.supplier : presets.son), amountTenge: 1, senderId: sender.id, mode,
+    operationType: business ? "B2B_INVOICE" : "P2P_TRANSFER", purpose: "Диагностика ML-DSA-65" };
+  const phishingSample: PrepareInput = { ...(business ? presets.supplier : presets.son), amountTenge: 15000, senderId: sender.id, mode,
+    operationType: business ? "B2B_INVOICE" : "P2P_TRANSFER", purpose: "Бонус B+ (сайт-клон)" };
+  const connection = { connecting: "Подключение…", live: "SSE Live", polling: "Опрос сервера", offline: "Нет соединения" };
+  return <main className="shell-container grid items-start gap-5 py-4 min-[1100px]:grid-cols-[minmax(0,45fr)_minmax(0,55fr)]">
+    <PhoneFrame className="min-w-0">
+      <div className="space-y-3 p-1 md:px-3 md:pb-4">
+        <AccountCard sender={sender} cosigner={cosigner} mode={mode} />
+        {cooling && <Card variant="warning" className="space-y-1"><h2 className="flex items-center gap-2 type-h3"><Snowflake size={17} /> Защитный режим охлаждения</h2>
+          <p className="text-sm text-ink-secondary">После сигнала Второй руки операции временно приостановлены до {new Date(coolingUntil).toLocaleString("ru-RU")}.</p></Card>}
+        {deviceError && <ErrorCard error={deviceError} action={<Button size="sm" onClick={() => setDeviceRevision(n => n + 1)}>Обновить устройства</Button>} />}
+        {unavailable && <ErrorCard error={{ failureCode: "ERR_CLIENT_KEYSTORE", message: "Не удалось открыть хранилище ключей браузера." }} />}
+        {live.error && <ErrorCard error={live.error} action={<Button size="sm" onClick={live.retry}>Обновить статус операции</Button>} />}
+        {receipt && attempt ? <TransactionResult record={record} error={attempt.error} http={attempt.http} cosigner={cosigner.fullName}
+          onInspect={() => inspect(attempt.id)} onCosign={() => setTab("cosign")} onNew={() => newForm(business ? "supplier" : "son")} /> :
+          <TransferForm key={form.key} mode={mode} sender={sender} presets={presets} initialPreset={form.preset} device={device} busy={busy}
+            deviceLoading={loading || !activeIds} cooling={cooling} onRegister={() => setDeviceDialog("choose")} onPrepare={input => void prepare(input)} />}
+        {prepareError && <ErrorCard error={prepareError} />}
+      </div>
+    </PhoneFrame>
+    <aside className="min-w-0 space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <SegmentedControl label="Панели демо-стенда" value={tab} onChange={setTab} className="min-w-0 max-w-full [&_button]:whitespace-normal [&_button]:px-2.5"
+          options={[{ value: "panel", label: "Панель хакера" }, { value: "cosign", label: <span><Users size={14} className="mr-1 inline" />Вторая рука (Co-Sign Live)</span>,
+            tone: "gold", badgeCount: record?.status === "PENDING_COSIGN" ? 1 : 0 }]} />
+        <span className="inline-flex items-center gap-1.5 text-xs text-ink-secondary"><CircleDot size={12} className={status === "live" ? "text-bcc" : "text-gold"} />{connection[status]}</span>
+      </div>
+      {tab === "cosign" ? <CosignEmbedSlot userId={cosigner.id} /> :
+        <AttackSimulatorPanel tx={record} error={attempt?.error} device={device} sample={phishingSample} onResult={complete} business={business}
+          onSocial={() => newForm(business ? "supplier" : "unknown")} onQuantum={openQuantum} onInspect={inspect} />}
+    </aside>
+    {deviceDialog && <DeviceOnboarding userId={sender.id} software={deviceDialog === "software"} onClose={() => setDeviceDialog(null)} />}
+    {prepared && signingDevice && <BiometricSignModal prepared={prepared} device={signingDevice} onClose={() => setPrepared(null)} onComplete={result => complete(prepared.txId, result)}
+      onFallback={() => { setPrepared(null); setDeviceDialog("software"); }} />}
+    {inspector && <CryptoInspectorDrawer txId={inspector} onClose={() => inspect(null)} onQuantum={openQuantum} />}
+    {quantum && <QuantumCompareModal sample={sample} deviceId={device?.id} onClose={() => setQuantum(false)} onInspect={inspect} onResult={complete} />}
+  </main>;
+}
+
+export function DemoStand() {
+  const { mode, senderId, cosignerId } = useDemoMode();
+  const { users, loading, recipientPresets, error, refresh } = useDemoState();
+  const { events } = useEventStream();
+  const latestReset = events.findLast(event => event.type === "DEMO_RESET")?.id;
+  const [reset, setReset] = useState(0);
+  useEffect(() => { if (latestReset) { setReset(latestReset); resetAttackState(); } }, [latestReset]);
+  const sender = users.find(user => user.id === senderId);
+  const cosigner = users.find(user => user.id === cosignerId);
+  if (!recipientPresets || !sender || !cosigner) return <main className="shell-container py-6">
+    {loading ? <Spinner label="Загружаем счета…" /> : <ErrorCard error={error ?? { failureCode: "ERR_USER_NOT_FOUND", message: "Не удалось загрузить участников." }}
+      action={<Button onClick={refresh}>Обновить</Button>} />}</main>;
+  return <>{error && <div className="shell-container pt-3"><ErrorCard error={error} action={<Button onClick={refresh}>Обновить</Button>} /></div>}
+    <DemoSession key={`${senderId}-${reset}`} sender={sender} cosigner={cosigner} mode={mode} presets={recipientPresets} refresh={refresh} /></>;
+}

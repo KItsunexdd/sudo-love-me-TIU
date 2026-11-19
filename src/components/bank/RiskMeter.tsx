@@ -4,6 +4,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { Building2, Check, Moon, PhoneIncoming, TriangleAlert } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { riskLevel } from "@/lib/risk/engine";
+import type { RiskLevel } from "@/lib/db/types";
 import { SPRING_SMOOTH } from "@/lib/ui/motion";
 
 const tiers = {
@@ -23,12 +24,12 @@ const rules = {
   DROP_ACCOUNT_PATTERN: [50, TriangleAlert],
 } as const;
 
-export function RiskMeter({ score, reasons = [], codes = [] }: {
-  score: number; reasons?: readonly string[]; codes?: readonly string[];
+export function RiskMeter({ score, level: assessedLevel, reasons = [], codes = [] }: {
+  score: number; level?: RiskLevel; reasons?: readonly string[]; codes?: readonly string[];
 }) {
   const reduce = useReducedMotion();
   const value = Number.isFinite(score) ? Math.min(100, Math.max(0, score)) : 0;
-  const level = riskLevel(value);
+  const level = assessedLevel ?? riskLevel(value);
   const { bar, text } = tiers[level];
 
   return (
