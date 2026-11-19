@@ -1,3 +1,3 @@
 export default function Home() {
-  return <main className="p-8"><h1 className="text-2xl font-semibold">BCC SafeSign</h1></main>;
+  return <main className="shell-container py-8"><h1 className="type-h1">Экран собирается</h1></main>;
 }

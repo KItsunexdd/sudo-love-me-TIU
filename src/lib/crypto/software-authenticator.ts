@@ -31,14 +31,14 @@ function encodeMap(entries: Array<[string | number, CBORType]>) {
   return encodeCBOR(new Map(entries));
 }
 
-export async function registerSoftware(options: PublicKeyCredentialCreationOptionsJSON) {
+export async function registerSoftware(options: PublicKeyCredentialCreationOptionsJSON, { extractable = false } = {}) {
   const origin = currentOrigin();
   const hostname = new URL(origin).hostname;
   const rpId = options.rp.id ?? hostname;
   if (hostname !== rpId || !options.pubKeyCredParams.some(p => p.alg === -7)) {
     throw new Error("Программный ключ требует домен банка и алгоритм ES256");
   }
-  const key = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, false, ["sign", "verify"]);
+  const key = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, extractable, ["sign", "verify"]);
   const point = new Uint8Array(await crypto.subtle.exportKey("raw", key.publicKey));
   // COSE EC2 / ES256 / P-256, followed by the affine x and y coordinates.
   const cose = encodeMap([[1, 2], [3, -7], [-1, 1], [-2, point.slice(1, 33)], [-3, point.slice(33)]]);
