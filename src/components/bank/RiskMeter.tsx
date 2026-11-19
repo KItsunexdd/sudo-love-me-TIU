@@ -33,36 +33,64 @@ export function RiskMeter({ score, level: assessedLevel, reasons = [], codes = [
   const { bar, text } = tiers[level];
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="type-h3">Оценка риска <span className="text-ink-muted">(Anti-Scam Engine)</span></h3>
+        <h3 className="text-sm font-semibold leading-snug 2xl:type-h3">
+          Оценка риска <span className="text-ink-muted">(Anti-Scam)</span>
+        </h3>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-lg font-bold tabular-nums">{value} / 100</span>
+          <span className="font-mono text-base font-bold tabular-nums 2xl:text-lg">{value} / 100</span>
           <Badge status={level} />
         </div>
       </div>
-      <div role="meter" aria-label="Оценка риска" aria-valuemin={0} aria-valuemax={100} aria-valuenow={value} aria-valuetext={text}
-        className="relative h-2.5 overflow-hidden rounded-full bg-terminal ring-1 ring-border-default">
-        <motion.div initial={false} animate={{ width: `${value}%` }} transition={reduce ? { duration: 0 } : SPRING_SMOOTH}
-          className={`h-full rounded-full transition-colors ${bar}`} />
+
+      <div
+        role="meter"
+        aria-label="Оценка риска"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={value}
+        aria-valuetext={text}
+        className="relative h-2.5 overflow-hidden rounded-full bg-terminal ring-1 ring-border-default"
+      >
+        <motion.div
+          initial={false}
+          animate={{ width: `${value}%` }}
+          transition={reduce ? { duration: 0 } : SPRING_SMOOTH}
+          className={`h-full rounded-full transition-colors ${bar}`}
+        />
         <span aria-hidden="true" className="absolute inset-y-0 left-[40%] w-px bg-ink-muted" />
         <span aria-hidden="true" className="absolute inset-y-0 left-[60%] w-px bg-ink-muted" />
       </div>
-      <p className="text-sm text-ink-secondary">{text}</p>
+
       {reasons.length > 0 ? (
-        <ul className="flex flex-wrap gap-2">
-          {reasons.map((reason, index) => {
-            const code = codes[index];
-            const match = code && Object.hasOwn(rules, code) ? rules[code as keyof typeof rules] : undefined;
-            const Icon = match?.[1] ?? TriangleAlert;
-            return <li key={reason} className="flex items-center gap-2 rounded-lg border border-border-default bg-terminal px-2.5 py-1.5 text-xs text-ink-secondary">
-              <Icon aria-hidden="true" className="size-3.5 shrink-0 text-gold" />
-              {reason}
-              {match && <span className="shrink-0 font-mono tabular-nums text-amber-300">+{match[0]}</span>}
-            </li>;
-          })}
-        </ul>
-      ) : value === 0 && <p className="flex items-center gap-2 text-sm text-bcc"><Check aria-hidden="true" className="size-4" /> Доверенный получатель • Аномалий не обнаружено</p>}
+        <>
+          <p className="text-xs font-medium text-ink-secondary sm:text-[13px]">{text}</p>
+          <ul className="flex flex-wrap gap-1.5">
+            {reasons.map((reason, index) => {
+              const code = codes[index];
+              const match = code && Object.hasOwn(rules, code) ? rules[code as keyof typeof rules] : undefined;
+              const Icon = match?.[1] ?? TriangleAlert;
+              return (
+                <li key={reason} className="flex items-center gap-1.5 rounded-lg border border-border-default bg-terminal px-2 py-1 text-xs text-ink-secondary">
+                  <Icon aria-hidden="true" className="size-3.5 shrink-0 text-gold" />
+                  <span>{reason}</span>
+                  {match && <span className="shrink-0 font-mono font-semibold tabular-nums text-amber-300">+{match[0]}</span>}
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs sm:text-[13px]">
+          <span className="text-ink-secondary">{text}</span>
+          {value === 0 && (
+            <span className="inline-flex items-center gap-1 font-medium text-bcc">
+              <Check aria-hidden="true" className="size-3.5" /> Доверенный получатель
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

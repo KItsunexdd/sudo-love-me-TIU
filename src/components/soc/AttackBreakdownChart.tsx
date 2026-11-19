@@ -50,7 +50,7 @@ export function AttackBreakdownChart({
                 Показать все
               </button>
             )}
-            <Badge tone={totalAttacks > 0 ? "danger" : "neutral"} className="font-mono">
+            <Badge tone={totalAttacks > 0 ? "danger" : "neutral"} className="font-mono tabular-nums">
               Всего: {totalAttacks}
             </Badge>
           </div>
@@ -104,7 +104,7 @@ export function AttackBreakdownChart({
                     onSelectCategory(selected ? "ALL" : item.key);
                   }
                 }}
-                className="cursor-pointer outline-none"
+                className="cursor-pointer rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-bcc"
                 style={{ opacity: dimmed ? 0.45 : 1 }}
               >
                 {/* Подсветка активной строки */}
@@ -172,6 +172,7 @@ export function AttackBreakdownChart({
                   fontSize={projectorMode ? 14 : 13}
                   fontWeight={700}
                   fontFamily="var(--font-mono)"
+                  style={{ fontVariantNumeric: "tabular-nums" }}
                 >
                   {item.count > 0 ? `${item.count} (${item.sharePercent}%)` : "0"}
                 </text>

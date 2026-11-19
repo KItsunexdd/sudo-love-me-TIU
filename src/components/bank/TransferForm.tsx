@@ -2,7 +2,8 @@
 
 import { Fingerprint, KeyRound, PhoneIncoming, UserRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Button, ErrorCard, SegmentedControl, Spinner, Toggle } from "@/components/ui";
+import { Button, ErrorCard, SegmentedControl, Skeleton, Toggle } from "@/components/ui";
+import { useAttackState } from "@/components/hacker/attacks";
 import { api, type ApiError, type DemoUsersResponse, type PrepareInput, type PrepareResponse } from "@/lib/client/api";
 import type { LocalDevice } from "@/lib/client/client-keystore";
 import type { Mode, OperationType, User } from "@/lib/db/types";
@@ -12,12 +13,28 @@ import { RiskMeter } from "./RiskMeter";
 type Presets = DemoUsersResponse["recipientPresets"];
 export type PresetName = keyof Presets | "office";
 const productOptions = [
-  { value: "P2P_TRANSFER", label: "Перевод" }, { value: "DEPOSIT_CLOSE", label: "Закрыть депозит" }, { value: "ONLINE_LOAN", label: "Онлайн-кредит" },
+  { value: "P2P_TRANSFER", label: "Перевод" },
+  { value: "DEPOSIT_CLOSE", label: "Закрыть депозит" },
+  { value: "ONLINE_LOAN", label: "Онлайн-кредит" },
 ] as const;
+
 function presetValues(name: PresetName, presets: Presets) {
   const recipient = name === "office" ? { ...presets.supplier, amountTenge: 120000 } : presets[name];
   const purposes = { son: "На продукты", unknown: "Перевод на безопасный счёт", supplier: "Оплата по счёту", office: "Канцтовары для офиса" };
   return { ...recipient, amount: String(recipient.amountTenge), purpose: purposes[name], call: name === "unknown", night: false };
+}
+
+function RiskMeterSkeleton() {
+  return (
+    <div aria-busy="true" aria-label="Оцениваем риск" className="space-y-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <Skeleton className="h-4 w-36" />
+        <Skeleton className="h-6 w-28 rounded-full" />
+      </div>
+      <Skeleton className="h-2.5 w-full rounded-full" />
+      <Skeleton className="h-4 w-56" />
+    </div>
+  );
 }
 
 export function TransferForm({ mode, sender, presets, initialPreset, device, deviceLoading, busy, cooling, onRegister, onPrepare }: {
@@ -29,12 +46,19 @@ export function TransferForm({ mode, sender, presets, initialPreset, device, dev
   const [operation, setOperation] = useState<OperationType>(business ? "B2B_INVOICE" : "P2P_TRANSFER");
   const { recipientName, recipientAccount, amount, purpose, call, night } = form;
   const [preview, setPreview] = useState<{ input: object; risk?: PrepareResponse["risk"]; error?: ApiError }>();
+  const { armed } = useAttackState();
   const amountTenge = Number(amount);
-  const riskInput = useMemo(() => ({ senderId: sender.id, mode, operationType: operation, amountTenge,
-    recipientAccount: recipientAccount.trim(), simulatedContext: { activeUnknownCall: call, nightTimeOverride: night } }),
-    [sender.id, mode, operation, amountTenge, recipientAccount, call, night]);
+  const riskInput = useMemo(() => ({
+    senderId: sender.id,
+    mode,
+    operationType: operation,
+    amountTenge,
+    recipientAccount: recipientAccount.trim(),
+    simulatedContext: { activeUnknownCall: call, nightTimeOverride: night },
+  }), [sender.id, mode, operation, amountTenge, recipientAccount, call, night]);
   const valid = Number.isSafeInteger(amountTenge) && amountTenge > 0 && Boolean(recipientAccount.trim());
   const current = preview?.input === riskInput ? preview : undefined;
+
   useEffect(() => {
     if (!valid) return;
     const controller = new AbortController();
@@ -52,48 +76,157 @@ export function TransferForm({ mode, sender, presets, initialPreset, device, dev
     setOperation(business ? "B2B_INVOICE" : "P2P_TRANSFER");
     setForm(presetValues(name, presets));
   }
+
   function chooseOperation(next: OperationType) {
     if (next === operation) return;
     if (next === "P2P_TRANSFER") return applyPreset("son");
     setOperation(next);
     const deposit = next === "DEPOSIT_CLOSE";
-    setForm(previous => ({ ...previous, amount: String(deposit ? sender.depositBalanceTenge : 1500000), recipientName: sender.fullName,
-      recipientAccount: sender.accountIban, purpose: deposit ? "Зачисление депозита на свой счёт" : "Зачисление онлайн-кредита", call: false, night: false }));
+    setForm(previous => ({
+      ...previous,
+      amount: String(deposit ? sender.depositBalanceTenge : 1500000),
+      recipientName: sender.fullName,
+      recipientAccount: sender.accountIban,
+      purpose: deposit ? "Зачисление депозита на свой счёт" : "Зачисление онлайн-кредита",
+      call: false,
+      night: false,
+    }));
   }
-  const fieldClass = "mt-1 h-10 w-full min-w-0 rounded-lg border border-border-strong bg-terminal px-3 text-sm text-ink-primary disabled:text-ink-secondary";
-  return <form onSubmit={event => { event.preventDefault(); if (valid && device && !busy && !cooling) onPrepare({ ...riskInput, recipientName, purpose }); }}>
-    <fieldset disabled={busy} className="min-w-0 space-y-3">
-      {business ? <h2 className="type-h2">Оплата счёта</h2> :
-        <SegmentedControl label="Тип операции" value={operation} onChange={chooseOperation} options={productOptions}
-          className="flex w-full [&_button]:whitespace-normal [&_button]:px-2" />}
-      <div className="grid grid-cols-2 gap-2">
-        <Button size="sm" variant="secondary" icon={<UserRound size={15} />} onClick={() => applyPreset(business ? "office" : "son")}>
-          {business ? "Офис · 120 000 ₸" : "Сыну 15 000 ₸ (Норма)"}</Button>
-        <Button size="sm" variant="secondary" icon={business ? undefined : <PhoneIncoming size={15} className="text-gold" />} onClick={() => applyPreset(business ? "supplier" : "unknown")}>
-          {business ? `ТОО «СнабТехСервис» ${formatTenge(presets.supplier.amountTenge)}` : "Звонок из «Нацбанка» 850 000 ₸"}</Button>
-      </div>
-      <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2">
-        <label className="type-label text-ink-secondary">Получатель<input className={fieldClass} value={recipientName} maxLength={120} required
-          readOnly={operation === "DEPOSIT_CLOSE"} onChange={e => setForm({ ...form, recipientName: e.target.value })} /></label>
-        <label className="type-label text-ink-secondary">Счёт (IBAN)<input className={fieldClass + " font-mono"} value={recipientAccount} maxLength={34}
-          required readOnly={operation === "DEPOSIT_CLOSE"} onChange={e => setForm({ ...form, recipientAccount: e.target.value.toUpperCase().replace(/\s/g, "") })} /></label>
-        <label className="type-label text-ink-secondary">Сумма, ₸<input className={fieldClass + " font-mono"} inputMode="numeric" pattern="[0-9]+" required value={amount}
-          onChange={e => setForm({ ...form, amount: e.target.value })} /></label>
-        <label className="type-label text-ink-secondary">Назначение<input className={fieldClass} value={purpose} maxLength={140}
-          onChange={e => setForm({ ...form, purpose: e.target.value })} /></label>
-      </div>
-      <div className="grid gap-3 py-1 sm:grid-cols-[1.5fr_1fr]">
-        <Toggle label="Активный звонок с незнакомого номера" checked={call} onChange={value => setForm({ ...form, call: value })} />
-        <Toggle label="Ночное время" checked={night} onChange={value => setForm({ ...form, night: value })} />
-      </div>
-      <div aria-live="polite" className="rounded-xl border border-border-default bg-surface p-3">
-        {current?.risk ? <RiskMeter {...current.risk} /> : current?.error ? <ErrorCard error={current.error} /> :
-          valid ? <Spinner label="Оцениваем риск…" /> : <p className="text-sm text-ink-secondary">Чтобы оценить риск, укажите счёт и целую положительную сумму.</p>}
-      </div>
-      {device ? <Button type="submit" className="w-full" icon={<Fingerprint size={23} />} loading={busy} disabled={cooling || !current?.risk || !recipientName.trim()}>
-        Подписать без SMS <span className="block text-xs font-medium">(Passkey + ML-DSA-65)</span></Button> :
-        <Button className="w-full" icon={<KeyRound size={19} />} disabled={deviceLoading} onClick={onRegister}>Привязать устройство за 5 сек</Button>}
-      {device?.deviceKind === "SOFTWARE_FALLBACK" && <p className="text-center font-mono text-xs text-amber-300">Mode: WebCrypto ECDSA + ML-DSA-65 (Software Fallback)</p>}
-    </fieldset>
-  </form>;
+
+  const fieldClass = "mt-1 h-9 w-full min-w-0 rounded-xl border border-border-default bg-terminal px-3 text-sm text-ink-primary transition-colors hover:border-border-strong focus-visible:border-bcc/70 disabled:text-ink-secondary 2xl:h-10";
+
+  return (
+    <form onSubmit={event => { event.preventDefault(); if (valid && device && !busy && !cooling) onPrepare({ ...riskInput, recipientName, purpose }); }}>
+      <fieldset disabled={busy} className="min-w-0 space-y-2.5 2xl:space-y-3">
+        {business ? (
+          <h2 className="type-h2">Оплата счёта</h2>
+        ) : (
+          <SegmentedControl
+            label="Тип операции"
+            value={operation}
+            onChange={chooseOperation}
+            options={productOptions}
+            className="flex w-full [&_button]:whitespace-normal [&_button]:px-2 [&_button]:py-1.5"
+          />
+        )}
+
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            className="tabular-nums"
+            icon={<UserRound size={15} />}
+            onClick={() => applyPreset(business ? "office" : "son")}
+          >
+            {business ? `Офис · ${formatTenge(120_000)}` : `Сыну · ${formatTenge(presets.son.amountTenge)}`}
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="tabular-nums"
+            icon={business ? undefined : <PhoneIncoming size={15} className="text-gold" />}
+            onClick={() => applyPreset(business ? "supplier" : "unknown")}
+          >
+            {business
+              ? `СнабТехСервис · ${formatTenge(presets.supplier.amountTenge)}`
+              : `«Нацбанк» · ${formatTenge(presets.unknown.amountTenge)}`}
+          </Button>
+        </div>
+
+        <div className="grid gap-x-2.5 gap-y-2 sm:grid-cols-2">
+          <label className="type-label text-ink-secondary">
+            Получатель
+            <input
+              className={fieldClass}
+              value={recipientName}
+              maxLength={120}
+              required
+              readOnly={operation === "DEPOSIT_CLOSE"}
+              onChange={e => setForm({ ...form, recipientName: e.target.value })}
+            />
+          </label>
+          <label className="type-label text-ink-secondary">
+            Счёт (IBAN)
+            <input
+              className={`${fieldClass} font-mono tabular-nums`}
+              value={recipientAccount}
+              maxLength={34}
+              required
+              readOnly={operation === "DEPOSIT_CLOSE"}
+              onChange={e => setForm({ ...form, recipientAccount: e.target.value.toUpperCase().replace(/\s/g, "") })}
+            />
+          </label>
+          <label className="type-label text-ink-secondary">
+            Сумма, ₸
+            <input
+              className={`${fieldClass} font-mono tabular-nums`}
+              inputMode="numeric"
+              pattern="[0-9]+"
+              required
+              value={amount}
+              onChange={e => setForm({ ...form, amount: e.target.value })}
+            />
+          </label>
+          <label className="type-label text-ink-secondary">
+            Назначение
+            <input
+              className={fieldClass}
+              value={purpose}
+              maxLength={140}
+              onChange={e => setForm({ ...form, purpose: e.target.value })}
+            />
+          </label>
+        </div>
+
+        <div className="grid gap-2 py-0.5 sm:grid-cols-[1.45fr_1fr]">
+          <Toggle label="Звонок с неизвестного номера" checked={call} onChange={value => setForm({ ...form, call: value })} />
+          <Toggle label="Ночное время" checked={night} onChange={value => setForm({ ...form, night: value })} />
+        </div>
+
+        <div aria-live="polite" className="min-h-[96px] rounded-xl border border-border-default bg-surface p-3">
+          {current?.risk ? (
+            <RiskMeter {...current.risk} />
+          ) : current?.error ? (
+            <ErrorCard error={current.error} />
+          ) : valid ? (
+            <RiskMeterSkeleton />
+          ) : (
+            <p className="text-sm text-ink-secondary">Чтобы оценить риск, укажите счёт и целую положительную сумму.</p>
+          )}
+        </div>
+
+        {device ? (
+          <Button
+            type="submit"
+            size="lg"
+            className="w-full"
+            icon={<Fingerprint size={22} />}
+            loading={busy}
+            disabled={cooling || !current?.risk || !recipientName.trim()}
+          >
+            <span>
+              Подписать без SMS
+              <span className="block text-xs font-medium opacity-85">Passkey + ML-DSA-65</span>
+            </span>
+          </Button>
+        ) : (
+          <Button size="lg" className="w-full" icon={<KeyRound size={19} />} disabled={deviceLoading} onClick={onRegister}>
+            Привязать устройство за 5 сек
+          </Button>
+        )}
+
+        {armed && (
+          <p className="text-center text-xs font-medium text-danger-text">
+            ⚡ В Панели хакера активен MITM-перехватчик (подмена произойдёт после вашей подписи)
+          </p>
+        )}
+
+        {device?.deviceKind === "SOFTWARE_FALLBACK" && (
+          <p className="text-center font-mono text-xs text-amber-300">
+            Режим: WebCrypto ECDSA + ML-DSA-65 (Software Fallback)
+          </p>
+        )}
+      </fieldset>
+    </form>
+  );
 }

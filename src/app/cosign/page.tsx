@@ -1,41 +1,44 @@
-"use client";
-
-import { useRouter, useSearchParams } from "next/navigation";
+import type { Metadata } from "next";
 import { Suspense } from "react";
-import { CosignFeed } from "@/components/cosign/CosignFeed";
-import { cosignHref, cosignMode, selectCosigner } from "@/components/cosign/cosignDetails";
-import { useDemoMode } from "@/components/shell/DemoModeProvider";
-import { SegmentedControl, Spinner } from "@/components/ui";
-import type { Segment } from "@/components/ui/SegmentedControl";
-import type { Mode } from "@/lib/db/types";
+import { Card, Skeleton } from "@/components/ui";
+import { CosignCabinet } from "./CosignCabinet";
 
-const profiles = [
-  { value: "B2C", label: "Доверенное лицо" },
-  { value: "B2B", label: "Директор", tone: "gold" },
-] as const satisfies readonly Segment<Mode>[];
+export const metadata: Metadata = {
+  title: "Вторая рука (Co-Sign)",
+  description:
+    "Мобильный кабинет доверенного лица и директора для подтверждения или блокировки рискованных операций Smart Co-Sign 2-of-2.",
+  openGraph: {
+    title: "Вторая рука (Co-Sign) · BCC SafeSign",
+    description:
+      "Мгновенные уведомления SSE Live и вторая криптоподпись Passkey + ML-DSA-65 для защиты от социальной инженерии.",
+  },
+};
 
-function CosignCabinet() {
-  const search = useSearchParams();
-  const router = useRouter();
-  const { mode: demoMode, setMode } = useDemoMode();
-  const requestedId = search.get("userId")?.trim() || null;
-  const mode = cosignMode(demoMode, requestedId);
-  const userId = selectCosigner(mode, requestedId);
-
+function CosignPageSkeleton() {
   return (
-    <CosignFeed key={`${mode}:${userId}`} userId={userId} mode={mode} profileSwitch={
-      <SegmentedControl label="Профиль второй подписи" value={mode} options={profiles} className="w-full" onChange={next => {
-        setMode(next);
-        router.replace(cosignHref(next));
-      }} />
-    } />
+    <div aria-busy="true" aria-label="Открываем кабинет «Вторая рука»" className="space-y-3">
+      <div className="flex items-center gap-3">
+        <Skeleton className="size-10 rounded-xl" />
+        <div className="flex-1 space-y-1.5">
+          <Skeleton className="h-4 w-36" />
+          <Skeleton className="h-3.5 w-48" />
+        </div>
+      </div>
+      <Skeleton className="h-10 w-full rounded-xl" />
+      <Card className="space-y-3">
+        <Skeleton className="h-14 w-full rounded-xl" />
+        <Skeleton className="h-24 w-full rounded-xl" />
+        <Skeleton className="h-12 w-full rounded-[14px]" />
+        <Skeleton className="h-12 w-full rounded-[14px]" />
+      </Card>
+    </div>
   );
 }
 
 export default function CosignPage() {
   return (
-    <main className="mx-auto min-h-[calc(100dvh-var(--topbar-height))] w-full max-w-[460px] px-4 py-5">
-      <Suspense fallback={<Spinner label="Открываем кабинет «Вторая рука»" />}>
+    <main className="mx-auto min-h-[calc(100dvh-56px)] w-full max-w-[460px] px-3.5 py-2.5 sm:py-4">
+      <Suspense fallback={<CosignPageSkeleton />}>
         <CosignCabinet />
       </Suspense>
     </main>

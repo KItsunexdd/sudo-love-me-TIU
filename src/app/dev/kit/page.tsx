@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { Kit } from "./Kit";
 
-export const metadata: Metadata = { title: "UI-кит · BCC SafeSign" };
+export const metadata: Metadata = {
+  title: "UI-кит",
+  description: "Библиотека компонентов BCC SafeSign и интерактивная проверка гибридной подписи в браузере.",
+};
 
 export default function KitPage() {
   return (

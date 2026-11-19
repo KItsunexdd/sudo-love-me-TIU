@@ -46,8 +46,8 @@ export function ErrorCard({ error, title, action, children, className = "" }: {
         <CircleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-danger-text" />
         <div className="min-w-0 space-y-2">
           <h3 className="type-h3">{title ?? known?.[0] ?? "Не удалось завершить действие"}</h3>
-          <p className="text-sm text-ink-secondary">{known?.[1] ?? error.message}</p>
-          <Badge tone="danger" className="max-w-full !whitespace-normal break-all font-mono">{error.failureCode}</Badge>
+          <p className="text-sm text-ink-secondary">{known?.[1] ?? (error.message || "Повторите попытку или сбросьте демо.")}</p>
+          <Badge tone="danger" className="max-w-full !whitespace-normal break-all font-mono text-[13px] font-bold tabular-nums">{error.failureCode}</Badge>
           {children}
           {action && <div>{action}</div>}
         </div>

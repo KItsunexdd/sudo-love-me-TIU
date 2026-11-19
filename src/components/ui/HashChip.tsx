@@ -27,8 +27,8 @@ export function HashChip({ value, label = "SHA-256", tone = "success", visible =
     <span title={value} className="mono-data inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-border-default bg-terminal px-2.5 py-1.5">
       {label && <span className="text-ink-muted">{label}</span>}
       <code className={`min-w-0 break-all ${color}`}>{shortHash(value, visible)}</code>
-      <button type="button" aria-label="Скопировать полный хэш" onClick={() => void copy()}
-        className="rounded p-1 text-ink-secondary hover:bg-elevated">
+      <button type="button" aria-label={`Скопировать ${label || "хэш"}`} onClick={() => void copy()}
+        className="rounded p-1 text-ink-secondary transition-colors hover:bg-elevated hover:text-ink-primary">
         {feedback === "copied" ? <Check aria-hidden="true" className="size-3.5 text-bcc" /> : <Copy aria-hidden="true" className="size-3.5" />}
       </button>
       <span role="status">

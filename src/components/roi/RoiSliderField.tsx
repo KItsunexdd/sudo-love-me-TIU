@@ -82,7 +82,7 @@ export function RoiSliderField({
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
-          <div className="flex items-center rounded-lg border border-border-default bg-terminal px-2.5 py-1 focus-within:border-bcc/70">
+          <div className="flex items-center rounded-xl border border-border-default bg-terminal px-2.5 py-1 transition-colors hover:border-border-strong focus-within:border-bcc/70 focus-within:ring-2 focus-within:ring-bcc/45">
             <label htmlFor={numberId} className="sr-only">
               {label} ({inputUnit ?? unit})
             </label>
@@ -119,21 +119,6 @@ export function RoiSliderField({
       </div>
 
       <div className="relative flex h-7 items-center">
-        <div aria-hidden="true" className="relative h-2 w-full overflow-hidden rounded-full border border-border-default bg-terminal">
-          <div
-            className={`h-full rounded-full transition-[width] duration-75 ${accentFill}`}
-            style={{ width: `${percent}%` }}
-          />
-        </div>
-
-        <div
-          aria-hidden="true"
-          className={`pointer-events-none absolute top-1/2 grid size-[22px] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 transition-[left] duration-75 ${thumbShadow}`}
-          style={{ left: `${percent}%` }}
-        >
-          <span className={`size-2 rounded-full ${dotColor}`} />
-        </div>
-
         <input
           id={sliderId}
           type="range"
@@ -146,8 +131,23 @@ export function RoiSliderField({
             setDraft(null);
             onChange(event.currentTarget.valueAsNumber);
           }}
-          className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+          className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
         />
+
+        <div aria-hidden="true" className="relative h-2 w-full overflow-hidden rounded-full border border-border-default bg-terminal peer-focus-visible:ring-2 peer-focus-visible:ring-bcc/80 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-surface">
+          <div
+            className={`h-full rounded-full transition-[width] duration-75 ${accentFill}`}
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+
+        <div
+          aria-hidden="true"
+          className={`pointer-events-none absolute top-1/2 grid size-[22px] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 transition-[left,transform] duration-75 peer-focus-visible:scale-110 ${thumbShadow}`}
+          style={{ left: `${percent}%` }}
+        >
+          <span className={`size-2 rounded-full ${dotColor}`} />
+        </div>
       </div>
 
       <div className="flex items-center justify-between font-mono text-xs tabular-nums text-ink-muted">

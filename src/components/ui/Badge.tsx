@@ -40,7 +40,7 @@ export function Badge({ status, tone, children, className = "" }: {
   return (
     <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold tracking-wide ${tones[tone ?? (label ? label.tone : "neutral")]} ${className}`}>
       {Icon && <Icon className="size-3.5 shrink-0" aria-hidden="true" />}
-      {dot && <span aria-hidden="true" className={`size-1.5 shrink-0 rounded-full bg-current ${dot === "pulse" ? "animate-pulse" : ""}`} />}
+      {dot && <span aria-hidden="true" className={`size-1.5 shrink-0 rounded-full bg-current ${dot === "pulse" ? "motion-safe:animate-pulse" : ""}`} />}
       {children ?? (label ? label.text : status)}
     </span>
   );
