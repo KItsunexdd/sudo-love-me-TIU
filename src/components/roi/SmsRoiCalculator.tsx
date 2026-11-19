@@ -260,7 +260,7 @@ export function SmsRoiCalculator() {
                     <Building2 aria-hidden="true" className="size-3.5" />
                     P&amp;L банка · OpEx
                   </Badge>
-                  <span className="font-mono text-xs text-emerald-300">
+                  <span className="font-mono text-xs tabular-nums text-emerald-300">
                     −{Math.round(result.inputs.migrationPercent)}% SMS
                   </span>
                 </div>
@@ -300,7 +300,7 @@ export function SmsRoiCalculator() {
                     <ShieldCheck aria-hidden="true" className="size-3.5" />
                     Антифрод · Co-Sign 2-of-2
                   </Badge>
-                  <span className="font-mono text-xs text-amber-300">
+                  <span className="font-mono text-xs tabular-nums text-amber-300">
                     −{Math.round(result.inputs.fraudPreventionPercent)}% фрода
                   </span>
                 </div>
@@ -369,7 +369,7 @@ export function SmsRoiCalculator() {
                   <TrendingDown aria-hidden="true" className="size-5 text-bcc" />
                   Годовые расходы банка на SMS (OpEx)
                 </h2>
-                <Badge tone="success" className="font-mono">
+                <Badge tone="success" className="font-mono tabular-nums">
                   Экономия {formatCompactTenge(result.yearlySmsSavings)}/год
                 </Badge>
               </div>

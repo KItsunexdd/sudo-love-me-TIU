@@ -252,7 +252,7 @@ export function SocDashboard() {
             <Badge tone={conn.tone}>
               <span
                 aria-hidden="true"
-                className={`size-2 rounded-full bg-current ${conn.pulse ? "animate-pulse" : ""}`}
+                className={`size-2 rounded-full bg-current ${conn.pulse ? "motion-safe:animate-pulse" : ""}`}
               />
               {conn.label}
             </Badge>
@@ -416,13 +416,27 @@ export function SocDashboard() {
       {/* Средняя секция: SVG-разбивка атак + сравнение задержек SMS vs SafeSign */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
         <div className="lg:col-span-7">
-          <AttackBreakdownChart
-            items={breakdown}
-            totalAttacks={aggregates?.attacksBlocked ?? 0}
-            activeFilter={typeFilter}
-            onSelectCategory={setTypeFilter}
-            projectorMode={projectorMode}
-          />
+          {loading ? (
+            <Card className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <Skeleton className="h-6 w-52" />
+                <Skeleton className="h-6 w-20 rounded-full" />
+              </div>
+              <div className="space-y-2.5 pt-2">
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <Skeleton key={index} className="h-6 w-full rounded-full" />
+                ))}
+              </div>
+            </Card>
+          ) : (
+            <AttackBreakdownChart
+              items={breakdown}
+              totalAttacks={aggregates?.attacksBlocked ?? 0}
+              activeFilter={typeFilter}
+              onSelectCategory={setTypeFilter}
+              projectorMode={projectorMode}
+            />
+          )}
         </div>
 
         <Card
@@ -433,7 +447,7 @@ export function SocDashboard() {
                 <Zap aria-hidden="true" className="size-5 text-quantum" />
                 Бенчмарк: SMS vs SafeSign
               </h2>
-              <Badge tone="info" className="font-mono">
+              <Badge tone="info" className="font-mono tabular-nums">
                 {mlDsa.count} замеров
               </Badge>
             </div>
@@ -446,7 +460,7 @@ export function SocDashboard() {
               <div>
                 <div className="mb-1 flex items-center justify-between gap-2 text-xs">
                   <span className="font-semibold text-ink-secondary">SMS-код (OTP)</span>
-                  <span className="font-mono font-bold text-danger-text">12–45 сек · 12 ₸ / оп</span>
+                  <span className="font-mono font-bold tabular-nums text-danger-text">12–45 сек · {formatTenge(12)} / оп</span>
                 </div>
                 <div className="h-3 w-full overflow-hidden rounded-full bg-terminal p-0.5">
                   <div className="h-full w-full rounded-full bg-danger/70" />
@@ -459,8 +473,8 @@ export function SocDashboard() {
               <div>
                 <div className="mb-1 flex items-center justify-between gap-2 text-xs">
                   <span className="font-semibold text-emerald-300">BCC SafeSign (Passkey + ML-DSA-65)</span>
-                  <span className="font-mono font-bold text-bcc">
-                    {mlDsa.count > 0 ? formatMs(hybridTotalAvgMs) : "< 5 мс"} · 0 ₸ / оп
+                  <span className="font-mono font-bold tabular-nums text-bcc">
+                    {mlDsa.count > 0 ? formatMs(hybridTotalAvgMs) : "< 5 мс"} · {formatTenge(0)} / оп
                   </span>
                 </div>
                 <div className="h-3 w-full overflow-hidden rounded-full bg-terminal p-0.5">
@@ -477,13 +491,13 @@ export function SocDashboard() {
               <div>
                 <dt className="text-xs text-ink-muted">ML-DSA-65 (ср. / p95)</dt>
                 <dd className="mono-data mt-1 font-bold text-sky-300">
-                  {mlDsa.count > 0 ? `${formatMs(mlDsa.averageMs)} / ${formatMs(mlDsa.p95Ms)}` : "—"}
+                  {loading ? <Skeleton className="h-5 w-24" /> : mlDsa.count > 0 ? `${formatMs(mlDsa.averageMs)} / ${formatMs(mlDsa.p95Ms)}` : "—"}
                 </dd>
               </div>
               <div>
                 <dt className="text-xs text-ink-muted">WebAuthn (ср. / p95)</dt>
                 <dd className="mono-data mt-1 font-bold text-emerald-300">
-                  {webAuthn.count > 0 ? `${formatMs(webAuthn.averageMs)} / ${formatMs(webAuthn.p95Ms)}` : "—"}
+                  {loading ? <Skeleton className="h-5 w-24" /> : webAuthn.count > 0 ? `${formatMs(webAuthn.averageMs)} / ${formatMs(webAuthn.p95Ms)}` : "—"}
                 </dd>
               </div>
             </dl>
@@ -498,7 +512,7 @@ export function SocDashboard() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <h2 className="type-h2">Журнал событий и атак</h2>
-                <Badge tone="neutral" className="font-mono">
+                <Badge tone="neutral" className="font-mono tabular-nums">
                   {filteredEvents.length} из {events.length}
                 </Badge>
               </div>
@@ -524,7 +538,7 @@ export function SocDashboard() {
                     value={searchQuery}
                     onChange={event => setSearchQuery(event.target.value)}
                     placeholder="Поиск txId, актора…"
-                    className="h-10 w-56 rounded-xl border border-border-default bg-terminal pl-9 pr-3 text-sm text-ink-primary placeholder:text-ink-muted focus:border-bcc/60 focus:outline-none"
+                    className="h-10 w-56 rounded-xl border border-border-default bg-terminal pl-9 pr-3 text-sm text-ink-primary placeholder:text-ink-muted transition-colors hover:border-border-strong focus-visible:border-bcc/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bcc/55"
                   />
                 </div>
               </div>
@@ -639,7 +653,7 @@ export function SocDashboard() {
                           setSelectedEvent(item);
                         }
                       }}
-                      className={`cursor-pointer transition-colors duration-500 focus-visible:bg-elevated focus-visible:outline-none ${highlightStyle}`}
+                      className={`cursor-pointer transition-colors duration-500 focus-visible:bg-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-bcc/80 ${highlightStyle}`}
                     >
                       <td className={`whitespace-nowrap py-3 pl-3 pr-3 font-mono tabular-nums text-ink-secondary ${projectorMode ? "text-sm" : "text-[13px]"}`}>
                         {formatEventTime(item.timestamp)}

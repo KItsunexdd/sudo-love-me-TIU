@@ -63,7 +63,7 @@ function SignatureLayerBlock({
           <Fingerprint aria-hidden="true" className="size-4 text-bcc" />
           {title} — Слой 1: WebAuthn (ECDSA P-256)
         </h3>
-        <Badge tone="success">
+        <Badge tone="success" className="font-mono tabular-nums">
           {bundle.webAuthnSignatureBytesLength} Б
         </Badge>
       </div>
@@ -81,7 +81,7 @@ function SignatureLayerBlock({
             <Cpu aria-hidden="true" className="size-4 text-quantum" />
             Слой 2: Post-Quantum {bundle.pqAlgorithm}
           </h3>
-          <Badge tone="info" className="font-mono">
+          <Badge tone="info" className="font-mono tabular-nums">
             NIST FIPS 204 · {bundle.pqSignatureBytesLength.toLocaleString("ru-KZ")} Б
           </Badge>
         </div>
@@ -192,7 +192,7 @@ export function SocEventDetailDrawer({ event, open, onClose }: SocEventDetailDra
           <Badge status={event.severity} />
           <Badge tone={meta.tone}>{meta.label}</Badge>
           {tx && <Badge status={tx.status} />}
-          <span className="font-mono text-xs text-ink-muted">{formatEventDateTime(event.timestamp)}</span>
+          <span className="font-mono text-xs tabular-nums text-ink-muted">{formatEventDateTime(event.timestamp)}</span>
         </div>
       }
       footer={
@@ -260,7 +260,7 @@ export function SocEventDetailDrawer({ event, open, onClose }: SocEventDetailDra
                 <Layers aria-hidden="true" className="size-4 text-bcc" />
                 1. 7-шаговая криптоверификация сервера
               </h3>
-              <span className="font-mono text-xs text-ink-muted">Итого: {formatMs(totalTraceMs)}</span>
+              <span className="font-mono text-xs tabular-nums text-ink-muted">Итого: {formatMs(totalTraceMs)}</span>
             </div>
             <VerificationStepsList trace={trace} failureCode={failureCode} />
           </section>
@@ -295,7 +295,7 @@ export function SocEventDetailDrawer({ event, open, onClose }: SocEventDetailDra
                   <div>
                     <dt className="text-ink-muted">Оценка риска</dt>
                     <dd className="mt-0.5 flex items-center gap-2">
-                      <span className="font-mono font-bold text-ink-primary">{tx.riskScore} / 100</span>
+                      <span className="font-mono font-bold tabular-nums text-ink-primary">{tx.riskScore} / 100</span>
                       <Badge status={tx.riskLevel} />
                     </dd>
                   </div>

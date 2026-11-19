@@ -32,7 +32,7 @@ export function SegmentedControl<T extends string>({ options, value, onChange, l
             {selected && <motion.span layoutId={reduce ? undefined : id} aria-hidden="true"
               className={`absolute inset-0 -z-10 rounded-[9px] border ${gold ? "border-gold/40 bg-gold/15" : "border-border-strong bg-elevated"}`} />}
             {option.label}
-            {Boolean(option.badgeCount) && <span className="rounded-full bg-danger-solid px-1.5 font-mono text-xs text-white">{option.badgeCount}</span>}
+            {Boolean(option.badgeCount) && <span className="rounded-full bg-danger-solid px-1.5 font-mono text-xs tabular-nums text-white motion-safe:animate-pulse">{option.badgeCount}</span>}
           </button>
         );
       })}

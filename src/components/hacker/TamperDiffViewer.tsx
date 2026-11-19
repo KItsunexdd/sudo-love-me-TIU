@@ -44,5 +44,5 @@ function CompareSignedCopy({ tx, field }: { tx: TransactionRecord; field: "amoun
 
 export function TamperDiffViewer({ tx, field }: { tx: TransactionRecord; field: "amount" | "iban" | null }) {
   return field ? <CompareSignedCopy key={tx.id + field} tx={tx} field={field} /> :
-    <JsonDiffViewer json={tx.canonicalJson} tamperDiff={tx.tamperDiff} />;
+    <JsonDiffViewer json={tx.canonicalJson} signedHash={tx.txHashHex} tamperDiff={tx.tamperDiff} />;
 }

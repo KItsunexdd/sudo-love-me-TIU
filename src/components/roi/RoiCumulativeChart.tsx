@@ -75,7 +75,7 @@ export function RoiCumulativeChart({ points }: RoiCumulativeChartProps) {
             </p>
           </div>
           {activePoint && (
-            <Badge tone="neutral" className="font-mono">
+            <Badge tone="neutral" className="font-mono tabular-nums">
               {activePoint.label}
             </Badge>
           )}
@@ -235,7 +235,7 @@ export function RoiCumulativeChart({ points }: RoiCumulativeChartProps) {
                   width={Math.max(16, zoneW)}
                   height={PLOT_H + 28}
                   fill="transparent"
-                  className="cursor-pointer outline-none"
+                  className="cursor-pointer rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-bcc"
                   role="button"
                   tabIndex={0}
                   aria-label={`${point.label}: OpEx ${formatCompactTenge(point.smsCumulative)}, совокупный эффект ${formatCompactTenge(point.totalCumulative)}`}

@@ -1,13 +1,14 @@
 "use client";
 
-import { Atom, LockKeyholeOpen } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
+import { Atom, LockKeyholeOpen, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { Badge, Button, Card, ErrorCard, Modal } from "@/components/ui";
 import { VerificationStepsList } from "@/components/crypto/VerificationStepsList";
 import { api, type ApiError, type ApiResult, type ExecuteResponse, type PrepareInput } from "@/lib/client/api";
 import { signPrimary, toClientError } from "@/lib/client/signer";
 import { hashPayload, toBase64 } from "@/lib/crypto/canonical";
-import { formatTenge } from "@/lib/ui/format";
+import { formatIban, formatTenge } from "@/lib/ui/format";
 
 export function QuantumCompareModal({ sample, deviceId, onClose, onInspect, onResult }: {
   sample: PrepareInput; deviceId?: string; onClose: () => void; onInspect: (id: string) => void;
@@ -17,6 +18,7 @@ export function QuantumCompareModal({ sample, deviceId, onClose, onInspect, onRe
   const [error, setError] = useState<ApiError>();
   const [http, setHttp] = useState<number>();
   const [id, setId] = useState<string>();
+  const reduce = useReducedMotion();
 
   async function check() {
     if (!deviceId || busy) return;
@@ -52,21 +54,72 @@ export function QuantumCompareModal({ sample, deviceId, onClose, onInspect, onRe
     }
   }
 
-  return <Modal open onClose={onClose} dismissible={!busy} title="Квантовая атака" wide
-    description="Что произойдёт при компрометации классического ключа?"
-    footer={<div className="flex flex-wrap justify-end gap-2">
-      {id && <Button variant="secondary" onClick={() => onInspect(id)} disabled={busy}>Открыть Crypto Inspector</Button>}
-      <Button loading={busy} disabled={!deviceId} onClick={() => void check()}>Проверить защиту ML-DSA-65</Button>
-    </div>}>
-    <div className="grid gap-3 sm:grid-cols-2">
-      <Card><LockKeyholeOpen className="mb-2 text-gold" /><h3 className="type-h3">Классический слой</h3>
-        <p className="mt-2 text-sm text-ink-secondary">В сценарии Шора считаем ECDSA скомпрометированной. Вы подтверждаете тест своим устройством.</p></Card>
-      <Card><Atom className="mb-2 text-quantum" /><h3 className="type-h3">Постквантовый слой</h3>
-        <p className="mt-2 text-sm text-ink-secondary">Сервер проверяет подпись временного ML-DSA-65 ключа по открытому ключу вашего устройства.</p></Card>
-    </div>
-    <p className="my-4 text-sm">Диагностическая операция без списания · {formatTenge(sample.amountTenge)} · {sample.recipientName} · <span className="mono-data">{sample.recipientAccount}</span></p>
-    {!deviceId && <p className="text-sm text-amber-300">Сначала привяжите устройство на демо-стенде.</p>}
-    {error && <div className="space-y-3">{http && <Badge tone="info">HTTP {http}</Badge>}<ErrorCard error={error} />
-      {error.verificationTrace?.length ? <VerificationStepsList trace={error.verificationTrace} failureCode={error.failureCode} /> : null}</div>}
-  </Modal>;
+  const verifiedBlocked = error?.failureCode === "ERR_PQ_SIGNATURE_INVALID";
+
+  return (
+    <Modal open onClose={onClose} dismissible={!busy} title="Квантовая атака (алгоритм Шора)" wide
+      description="Что произойдёт при компрометации классического ключа ECDSA P-256?"
+      footer={
+        <div className="flex flex-wrap justify-end gap-2">
+          {id && <Button variant="secondary" onClick={() => onInspect(id)} disabled={busy}>Открыть Crypto Inspector</Button>}
+          <Button loading={busy} disabled={!deviceId} onClick={() => void check()}>Проверить защиту ML-DSA-65</Button>
+        </div>
+      }
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
+        <motion.div
+          animate={verifiedBlocked && !reduce ? { x: [0, -5, 5, -3, 0] } : undefined}
+          transition={{ duration: 0.3 }}
+        >
+          <Card variant={verifiedBlocked ? "danger" : "default"} className="h-full space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <LockKeyholeOpen aria-hidden="true" className={verifiedBlocked ? "text-danger-text" : "text-gold"} />
+              <Badge tone={verifiedBlocked ? "danger" : "warning"}>
+                {verifiedBlocked ? "Скомпрометирован" : "ECDSA P-256"}
+              </Badge>
+            </div>
+            <h3 className="type-h3">Классический слой</h3>
+            <p className="text-sm text-ink-secondary">
+              В сценарии Шора считаем классический ключ ECDSA взломанным. Вы подтверждаете тест своим устройством.
+            </p>
+          </Card>
+        </motion.div>
+
+        <motion.div
+          animate={verifiedBlocked && !reduce ? { scale: [1, 1.02, 1] } : undefined}
+          transition={{ duration: 0.28 }}
+        >
+          <Card
+            variant={verifiedBlocked ? "success" : "elevated"}
+            className={`h-full space-y-2 ${verifiedBlocked ? "border-quantum/60 shadow-glow-quantum" : "border-quantum/35"}`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              {verifiedBlocked ? <ShieldCheck aria-hidden="true" className="text-quantum" /> : <Atom aria-hidden="true" className="text-quantum" />}
+              <Badge tone="info" className="font-mono tabular-nums">
+                {verifiedBlocked ? "Удар отражён" : "FIPS 204 · 3 309 Б"}
+              </Badge>
+            </div>
+            <h3 className="type-h3">Постквантовый слой ML-DSA-65</h3>
+            <p className="text-sm text-ink-secondary">
+              Сервер проверяет подпись на решётках по открытому ключу устройства и отклоняет поддельный PQ-ключ.
+            </p>
+          </Card>
+        </motion.div>
+      </div>
+
+      <p className="my-4 rounded-xl border border-border-default bg-terminal px-3.5 py-2.5 text-sm text-ink-secondary">
+        Диагностическая операция без списания · <span className="font-mono font-semibold tabular-nums text-ink-primary">{formatTenge(sample.amountTenge)}</span> · {sample.recipientName} · <span className="mono-data text-ink-primary">{formatIban(sample.recipientAccount)}</span>
+      </p>
+
+      {!deviceId && <p className="text-sm text-amber-300">Сначала привяжите устройство на демо-стенде.</p>}
+
+      {error && (
+        <div className="space-y-3">
+          {http && <Badge tone="info" className="font-mono tabular-nums">HTTP {http}</Badge>}
+          <ErrorCard error={error} />
+          {error.verificationTrace?.length ? <VerificationStepsList trace={error.verificationTrace} failureCode={error.failureCode} /> : null}
+        </div>
+      )}
+    </Modal>
+  );
 }

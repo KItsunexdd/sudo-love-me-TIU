@@ -1,10 +1,10 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { BadgeCheck, LoaderCircle, ShieldCheck, ShieldX } from "lucide-react";
 import Link from "next/link";
 import { useRef, useState, type ReactNode } from "react";
-import { Badge, Button, Card, EmptyState, ErrorCard, Spinner } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, ErrorCard, Skeleton } from "@/components/ui";
 import { api, type ApiError } from "@/lib/client/api";
 import { signCosign, SignerError, toClientError } from "@/lib/client/signer";
 import { useDemoState } from "@/lib/client/useDemoState";
@@ -40,23 +40,28 @@ type SuccessfulDecision = {
 };
 
 function DecisionResult({ decision, coolingOffActive }: { decision: SuccessfulDecision; coolingOffActive: boolean }) {
+  const reduce = useReducedMotion();
   const { transaction, status } = decision;
   const blocked = status === "BLOCKED_BY_COSIGNER";
   const corporate = transaction.payload.mode === "B2B";
   return (
-    <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3 }}>
+    <motion.div
+      initial={reduce ? false : { opacity: 0, scale: 0.97 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: reduce ? 0 : 0.28 }}
+    >
       <Card variant="success" role="status" className="space-y-3">
         <div className="flex items-center gap-3">
-          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-bcc/10 text-bcc">
+          <span className="grid size-11 shrink-0 place-items-center rounded-xl border border-bcc/35 bg-bcc/15 text-bcc">
             {blocked ? <ShieldX aria-hidden="true" className="size-6" /> : <BadgeCheck aria-hidden="true" className="size-6" />}
           </span>
           <div className="min-w-0">
-            <h2 className="type-h2 break-words">
+            <h2 className="type-h2 break-words tabular-nums">
               {blocked ? corporate ? "Платёж отклонён" :
                 `Спасено ${formatTenge(decision.savedAmountTenge ?? transaction.payload.amountTenge)}` : "Операция подписана 2-of-2"}
             </h2>
-            <p className="mt-1 break-words text-sm text-ink-secondary">
-              {transaction.payload.recipientName} · {formatTenge(transaction.payload.amountTenge)}
+            <p className="mt-0.5 break-words text-sm tabular-nums text-ink-secondary">
+              {transaction.payload.recipientName} · <span className="font-mono">{formatTenge(transaction.payload.amountTenge)}</span>
             </p>
           </div>
         </div>
@@ -76,14 +81,14 @@ function DecisionResult({ decision, coolingOffActive }: { decision: SuccessfulDe
 function DecisionHistory({ transactions }: { transactions: TransactionRecord[] }) {
   return (
     <section className="space-y-2">
-      <h2 className="type-h2">История решений</h2>
-      {transactions.length === 0 ? <p className="text-sm text-ink-secondary">Решений пока нет.</p> : (
-        <ul className="divide-y divide-border-subtle rounded-xl border border-border-default bg-surface px-3">
+      <h2 className="type-h3 text-ink-secondary">История решений</h2>
+      {transactions.length === 0 ? <p className="text-sm text-ink-muted">Решений пока нет.</p> : (
+        <ul className="divide-y divide-border-subtle rounded-2xl border border-border-default bg-surface px-3.5">
           {transactions.map(tx => (
-            <li key={tx.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
+            <li key={tx.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
               <div className="min-w-0">
-                <p className="break-words text-sm font-semibold">{tx.payload.recipientName}</p>
-                <p className="mono-data text-ink-secondary">{formatTenge(tx.payload.amountTenge)} · <time dateTime={tx.updatedAt}>{formatDecisionTime(tx.updatedAt)}</time></p>
+                <p className="break-words text-sm font-semibold text-ink-primary">{tx.payload.recipientName}</p>
+                <p className="mono-data text-xs text-ink-secondary">{formatTenge(tx.payload.amountTenge)} · <time dateTime={tx.updatedAt}>{formatDecisionTime(tx.updatedAt)}</time></p>
               </div>
               {tx.status === "BLOCKED_BY_COSIGNER"
                 ? <Badge tone="danger">{tx.payload.mode === "B2B" ? "Платёж отклонён" : "Перевод остановлен"}</Badge>
@@ -96,8 +101,19 @@ function DecisionHistory({ transactions }: { transactions: TransactionRecord[] }
   );
 }
 
-export function CosignFeed({ userId, mode, compact = false, profileSwitch }: {
-  userId: string; mode: Mode; compact?: boolean; profileSwitch?: ReactNode;
+function FeedSkeleton() {
+  return (
+    <Card aria-busy="true" aria-label="Загрузка запросов Второй руки" className="space-y-3">
+      <Skeleton className="h-12 w-full rounded-xl" />
+      <Skeleton className="h-20 w-full rounded-xl" />
+      <Skeleton className="h-11 w-full rounded-xl" />
+      <Skeleton className="h-11 w-full rounded-xl" />
+    </Card>
+  );
+}
+
+export function CosignFeed({ userId, mode, compact = false, hideConnectionBadge = false, profileSwitch }: {
+  userId: string; mode: Mode; compact?: boolean; hideConnectionBadge?: boolean; profileSwitch?: ReactNode;
 }) {
   const feed = useCosignFeed(userId, mode);
   const { users } = useDemoState();
@@ -196,54 +212,99 @@ export function CosignFeed({ userId, mode, compact = false, profileSwitch }: {
   }
 
   return (
-    <div className={`min-w-0 space-y-4 ${compact ? "p-3" : ""}`}>
-      <header className="space-y-3">
-        <div className="flex items-center gap-3">
-          <span aria-hidden="true" className={`grid size-11 shrink-0 place-items-center rounded-xl border font-semibold ${corporate ? "border-gold/40 bg-gold/10 text-gold" : "border-bcc/40 bg-bcc/10 text-bcc"}`}>
-            {initials}
-          </span>
-          <div className="min-w-0">
-            {compact ? <h2 className="type-h3">Вторая рука</h2> : <h1 className="type-h1">Вторая рука</h1>}
-            <p className="mt-0.5 break-words text-sm text-ink-secondary">{profileName} · {corporate ? "Директор" : "Доверенное лицо"}</p>
+    <div className={`min-w-0 ${compact ? "space-y-2.5 p-2.5" : "space-y-3"}`}>
+      <header className="space-y-2">
+        <div className="flex items-center justify-between gap-2.5">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span aria-hidden="true" className={`grid size-9 shrink-0 place-items-center rounded-xl border text-sm font-bold ${corporate ? "border-gold/40 bg-gold/10 text-gold" : "border-bcc/40 bg-bcc/10 text-bcc"}`}>
+              {initials}
+            </span>
+            <div className="min-w-0">
+              {compact ? (
+                <h2 className="truncate text-sm font-bold leading-tight">{profileName}</h2>
+              ) : (
+                <h1 className="truncate text-base font-bold leading-tight sm:text-lg">{profileName}</h1>
+              )}
+              <p className="truncate text-xs text-ink-secondary">
+                Вторая рука · {corporate ? "Директор" : "Доверенное лицо"}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+            {device && (
+              <Badge status={device.deviceKind} className="px-2 py-0.5 text-xs">
+                {device.deviceKind === "PLATFORM_PASSKEY" ? "Passkey #2" : "Software #2"}
+              </Badge>
+            )}
+            {!hideConnectionBadge && (
+              <span role="status">
+                <Badge tone={connectionTone} className="px-2 py-0.5 text-xs">
+                  <span aria-hidden="true" className={`size-1.5 rounded-full bg-current ${feed.status === "live" ? "motion-safe:animate-pulse" : ""}`} />
+                  {connectionLabel}
+                </Badge>
+              </span>
+            )}
           </div>
         </div>
+
         {profileSwitch}
-        <div className="flex flex-wrap items-center gap-2">
-          <span role="status">
-            <Badge tone={connectionTone}>
-              <span aria-hidden="true" className={`size-1.5 rounded-full bg-current ${feed.status === "live" ? "motion-safe:animate-pulse" : ""}`} />
-              {connectionLabel}
-            </Badge>
-          </span>
-          {device && <Badge status={device.deviceKind}>{device.deviceKind === "PLATFORM_PASSKEY" ? "Passkey #2" : "Software Key #2"}</Badge>}
-        </div>
       </header>
 
-      {feed.error && <ErrorCard error={feed.error}
-        action={<Button variant="secondary" size="sm" onClick={feed.refresh}>Обновить запросы</Button>} />}
+      {feed.error && (
+        <ErrorCard
+          error={feed.error}
+          action={<Button variant="secondary" size="sm" onClick={feed.refresh}>Обновить запросы</Button>}
+        />
+      )}
       {recentActionError && <ErrorCard error={recentActionError} />}
 
-      {feed.loading ? <div className="flex justify-center py-8"><Spinner label="Загрузка запросов" /></div> : (
+      {feed.loading ? (
+        <FeedSkeleton />
+      ) : (
         <>
           {showOutcome && <DecisionResult key={outcome.transaction.id} decision={outcome} coolingOffActive={coolingOffActive} />}
           {pending.length > 0 ? (
-            <section className="space-y-3" aria-label="Входящие запросы">
-              {pending.map((tx, index) => (
-                <CosignRequestCard key={tx.id} transaction={tx} senderName={senderName(tx)} deviceKind={device?.deviceKind}
-                  busy={action?.txId === tx.id ? action.kind : null} disabled={Boolean(action)}
-                  onReject={() => void decide(tx, "reject")} onSign={() => void decide(tx, "sign")}
-                  onExpire={feed.refresh} devicePrompt={index === 0 ? devicePrompt : undefined} />
-              ))}
+            <section className="space-y-2.5" aria-label="Входящие запросы">
+              <AnimatePresence initial={false}>
+                {pending.map((tx, index) => (
+                  <CosignRequestCard
+                    key={tx.id}
+                    transaction={tx}
+                    senderName={senderName(tx)}
+                    deviceKind={device?.deviceKind}
+                    compact={compact}
+                    busy={action?.txId === tx.id ? action.kind : null}
+                    disabled={Boolean(action)}
+                    onReject={() => void decide(tx, "reject")}
+                    onSign={() => void decide(tx, "sign")}
+                    onExpire={feed.refresh}
+                    devicePrompt={index === 0 ? devicePrompt : undefined}
+                  />
+                ))}
+              </AnimatePresence>
             </section>
           ) : (
             <>
-              {!outcome && !recentActionError && latest?.failureCode && <ErrorCard error={{
-                status: latest.status, failureCode: latest.failureCode, message: failureMessages[latest.failureCode],
-              }} />}
+              {!outcome && !recentActionError && latest?.failureCode && (
+                <ErrorCard error={{
+                  status: latest.status,
+                  failureCode: latest.failureCode,
+                  message: failureMessages[latest.failureCode],
+                }} />
+              )}
               {!feed.error && !outcome && !latest?.failureCode && (
-                <EmptyState icon={ShieldCheck} title={corporate ? "Нет платежей на подпись" : "Всё спокойно"}
-                  description={corporate ? corporateRule : "Здесь появятся операции, которым нужна ваша подпись."}
-                  action={compact ? undefined : <Link className="rounded text-sm font-semibold text-bcc hover:underline" href={`/?mode=${mode}`}>Открыть демо-стенд</Link>} />
+                <EmptyState
+                  icon={ShieldCheck}
+                  className={compact ? "p-4" : "p-5"}
+                  title={corporate ? "Нет платежей на подпись" : "Всё спокойно"}
+                  description={corporate ? corporateRule : "Здесь появятся операции, которым нужна ваша подпись 2-of-2."}
+                  action={compact ? undefined : (
+                    <Link className="rounded-lg text-sm font-semibold text-bcc hover:underline" href={`/?mode=${mode}`}>
+                      Открыть демо-стенд
+                    </Link>
+                  )}
+                />
               )}
               {devicePrompt}
             </>

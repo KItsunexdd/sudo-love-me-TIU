@@ -100,7 +100,7 @@ function KitSmoke() {
     </div>} divided>
       <div className="grid gap-5 lg:grid-cols-2">
         <div className="min-w-0 space-y-4">
-          <p className="text-sm text-ink-secondary">Режим WebCrypto ECDSA + ML-DSA-65 (Software Fallback). Перевод списывает 15 000 ₸ со счёта Айгуль и зачисляет их Арману в демо.</p>
+          <p className="text-sm text-ink-secondary">Режим WebCrypto ECDSA + ML-DSA-65 (Software Fallback). Перевод списывает <span className="font-mono tabular-nums text-ink-primary">{formatTenge(15_000)}</span> со счёта Айгуль и зачисляет их Арману в демо.</p>
           <div>
             <p className="text-sm text-ink-secondary">Баланс Айгуль</p>
             <p className="display-kpi mt-1">{aigul ? formatTenge(aigul.balanceTenge) : "—"}</p>
@@ -109,7 +109,7 @@ function KitSmoke() {
             <Button variant="secondary" icon={<Fingerprint className="size-4" />} loading={busy === "register"} disabled={busy !== null}
               onClick={() => void run("register")}>Зарегистрировать software-устройство для Айгуль</Button>
             <Button icon={<Send className="size-4" />} loading={busy === "transfer"} disabled={busy !== null || !recipientPresets}
-              onClick={() => void run("transfer")}>Сделать перевод 15 000 ₸</Button>
+              onClick={() => void run("transfer")}>Сделать перевод {formatTenge(15_000)}</Button>
           </div>
           {stateError && <ErrorCard error={stateError} />}
           {outcome?.type === "registered" && <div className="flex flex-wrap items-center gap-2">
@@ -205,9 +205,10 @@ export function Kit() {
         </Card>
         <section aria-labelledby="kit-blocked-title" className="space-y-3">
           <h2 id="kit-blocked-title" className="type-h2">Образец карточки отказа</h2>
-          <AttackBlockedShield httpStatus={403} error={{
+          <AttackBlockedShield httpStatus={403} durationMs={3.8} error={{
             status: "REJECTED_CRYPTO", failureCode: "ERR_WYSIWYS_TAMPERED",
             message: "Пример текста для ответа сервера при подмене реквизитов.",
+            tamperDiff: [{ field: "amountTenge", original: "15000", tampered: "500000" }],
           }} />
         </section>
       </div>

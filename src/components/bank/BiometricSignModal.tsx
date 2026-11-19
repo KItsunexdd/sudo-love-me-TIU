@@ -1,28 +1,80 @@
 "use client";
 
 import { motion, useReducedMotion } from "framer-motion";
-import { Fingerprint, LockKeyhole, LockKeyholeOpen } from "lucide-react";
+import { Atom, CheckCircle2, Fingerprint, LockKeyhole, LockKeyholeOpen } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, Card, ErrorCard, HashChip, JsonDiffViewer, Modal } from "@/components/ui";
 import { api, type ApiError, type ApiResult, type ExecuteResponse, type PrepareResponse } from "@/lib/client/api";
 import type { LocalDevice } from "@/lib/client/client-keystore";
 import { signPrimary, toClientError, type HybridSignature } from "@/lib/client/signer";
-import { buildExecuteBody, rememberValidPacket, useAttackState } from "@/components/hacker/attacks";
+import { buildExecuteBody, MITM_AMOUNT_TENGE, rememberValidPacket, useAttackState } from "@/components/hacker/attacks";
 import { formatIban, formatMs, formatTenge } from "@/lib/ui/format";
 import { lockSnapVariants, reducedMotionVariants } from "@/lib/ui/motion";
 
-function Lock({ label, timing, busy, quantum }: { label: string; timing?: number; busy: boolean; quantum?: boolean }) {
+type SignStage = "review" | "webauthn" | "mldsa" | "sending";
+
+function LockTile({
+  label,
+  subtitle,
+  state,
+  timing,
+  quantum = false,
+}: {
+  label: string;
+  subtitle: string;
+  state: "idle" | "signing" | "signed";
+  timing?: number;
+  quantum?: boolean;
+}) {
   const reduce = useReducedMotion();
-  const Icon = timing === undefined ? LockKeyholeOpen : LockKeyhole;
-  return <motion.div initial={false} animate={timing !== undefined && !reduce ? { opacity: [0.55, 1] } : { opacity: 1 }}
-    transition={{ duration: 0.18, delay: quantum ? 0.12 : 0 }}
-    className={`rounded-xl border border-border-default bg-terminal p-3 ${quantum ? "text-quantum" : "text-bcc"}`}>
-    <motion.div variants={reduce ? reducedMotionVariants : lockSnapVariants}
-      animate={timing !== undefined ? "signed" : busy && !quantum ? "signing" : "idle"}><Icon size={22} /></motion.div>
-    <h3 className="mt-2 font-semibold">{label}</h3><p className="text-xs text-ink-secondary">
-      {timing !== undefined ? `Подписано · ${formatMs(timing)}` : busy ? quantum ? "После WebAuthn" : "Подтверждение устройством…" : "Готов к подписи"}
-    </p>
-  </motion.div>;
+  const Icon = state === "signed" ? LockKeyhole : quantum ? Atom : LockKeyholeOpen;
+  const toneClass = quantum
+    ? state === "signed"
+      ? "border-quantum/60 bg-quantum/[.12] text-quantum shadow-glow-quantum"
+      : state === "signing"
+        ? "border-quantum/55 bg-quantum/[.08] text-quantum"
+        : "border-border-default bg-terminal text-quantum"
+    : state === "signed"
+      ? "border-bcc/60 bg-bcc/[.12] text-bcc shadow-glow-bcc"
+      : state === "signing"
+        ? "border-bcc/55 bg-bcc/[.08] text-bcc shadow-glow-bcc"
+        : "border-border-default bg-terminal text-bcc";
+
+  const statusText =
+    state === "signed" && timing !== undefined
+      ? `Подписано · ${formatMs(timing)}`
+      : state === "signing"
+        ? quantum
+          ? "Генерация ML-DSA-65…"
+          : "Подтвердите устройством…"
+        : "Готов к подписи";
+
+  return (
+    <div className={`relative overflow-hidden rounded-xl border p-3.5 transition-colors duration-200 ${toneClass}`}>
+      {quantum && state === "signing" && !reduce && (
+        <motion.span
+          aria-hidden="true"
+          initial={{ x: "-100%" }}
+          animate={{ x: "100%" }}
+          transition={{ duration: 0.45, repeat: Infinity, ease: "linear" }}
+          className="pointer-events-none absolute inset-y-0 left-0 w-1/2 bg-[linear-gradient(90deg,transparent,rgba(56,189,248,0.28),transparent)]"
+        />
+      )}
+      <div className="relative flex items-center justify-between gap-2">
+        <motion.div
+          variants={reduce ? reducedMotionVariants : lockSnapVariants}
+          animate={state}
+          className="inline-flex size-9 items-center justify-center rounded-lg border border-current/30 bg-black/25"
+        >
+          <Icon aria-hidden="true" size={20} />
+        </motion.div>
+        {state === "signed" && <CheckCircle2 aria-hidden="true" size={18} className="shrink-0" />}
+      </div>
+      <h3 className="relative mt-2.5 text-sm font-semibold text-ink-primary">{label}</h3>
+      <p className="relative text-xs text-ink-muted">{subtitle}</p>
+      <p className="relative mt-1.5 font-mono text-xs font-semibold tabular-nums text-ink-secondary">{statusText}</p>
+    </div>
+  );
 }
 
 export function BiometricSignModal({ prepared, device, onClose, onComplete, onFallback }: {
@@ -30,10 +82,12 @@ export function BiometricSignModal({ prepared, device, onClose, onComplete, onFa
   onComplete: (result: ApiResult<ExecuteResponse>) => void; onFallback: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [stage, setStage] = useState<SignStage>("review");
   const [error, setError] = useState<ApiError>();
   const [timings, setTimings] = useState<HybridSignature["timings"]>();
   const [ack, setAck] = useState(false);
   const [now, setNow] = useState(Date.now);
+  const [mitmIntercepted, setMitmIntercepted] = useState(false);
   const active = useRef(false);
   const submitting = useRef(false);
   const { payload, txHashHex, risk } = prepared;
@@ -41,66 +95,192 @@ export function BiometricSignModal({ prepared, device, onClose, onComplete, onFa
   const software = device.deviceKind === "SOFTWARE_FALLBACK";
   const reduceMotion = useReducedMotion();
   const { armed } = useAttackState();
+
   useEffect(() => {
     active.current = true;
     const ticker = setInterval(() => setNow(Date.now()), 1000);
     return () => { clearInterval(ticker); active.current = false; };
   }, []);
+
   async function sign() {
     if (submitting.current || !remaining || (risk.requiresAcknowledgement && !ack)) return;
     submitting.current = true;
     setBusy(true);
+    setStage("webauthn");
     setError(undefined);
+    setMitmIntercepted(false);
     try {
       const signed = await signPrimary(prepared, device.id);
       if (!active.current) return;
       setTimings(signed.timings);
+
+      const wasArmed = Boolean(armed);
       // The client always signs the payload it displayed. An armed MITM interceptor rewrites the
       // submitted copy afterwards, exactly as malware on the wire would; the server must reject it.
-      const body = buildExecuteBody({ txId: prepared.txId, deviceId: device.id, submittedPayload: payload,
-        webAuthnAssertion: signed.webAuthnAssertion, pqSignatureBase64: signed.pqSignatureBase64,
-        clientTimings: signed.timings, acknowledgedWarning: ack });
+      const body = buildExecuteBody({
+        txId: prepared.txId,
+        deviceId: device.id,
+        submittedPayload: payload,
+        webAuthnAssertion: signed.webAuthnAssertion,
+        pqSignatureBase64: signed.pqSignatureBase64,
+        clientTimings: signed.timings,
+        acknowledgedWarning: ack,
+      });
       const execution = api.execute(body);
-      // Let both lock confirmations finish while the server verifies the signatures.
-      const [result] = await Promise.all([execution, reduceMotion ? undefined : new Promise(resolve => setTimeout(resolve, 320))]);
+
+      if (!reduceMotion) {
+        setStage("mldsa");
+        await new Promise(resolve => setTimeout(resolve, 210));
+        if (!active.current) return;
+        setStage("sending");
+        if (wasArmed) setMitmIntercepted(true);
+        await new Promise(resolve => setTimeout(resolve, wasArmed ? 280 : 140));
+      } else {
+        setStage("sending");
+      }
+
+      const result = await execution;
       if (result.ok) rememberValidPacket(body, result.data.status);
       if (active.current) onComplete(result);
     } catch (cause) {
-      if (active.current) setError(toClientError(cause));
+      if (active.current) {
+        setStage("review");
+        setError(toClientError(cause));
+      }
     } finally {
       submitting.current = false;
       if (active.current) setBusy(false);
     }
   }
+
   const fields = [
-    ["Операция", { ONLINE_LOAN: "Онлайн-кредит", DEPOSIT_CLOSE: "Закрытие депозита", P2P_TRANSFER: "Перевод", B2B_INVOICE: "Оплата счёта" }[payload.operationType]],
-    ["Получатель", payload.recipientName], ["Счёт (IBAN)", formatIban(payload.recipientAccount)],
-    ["Назначение", payload.purpose || "Без назначения"],
+    { label: "Операция", value: { ONLINE_LOAN: "Онлайн-кредит", DEPOSIT_CLOSE: "Закрытие депозита", P2P_TRANSFER: "Перевод", B2B_INVOICE: "Оплата счёта" }[payload.operationType], mono: false },
+    { label: "Получатель", value: payload.recipientName, mono: false },
+    { label: "Счёт (IBAN)", value: formatIban(payload.recipientAccount), mono: true },
+    { label: "Назначение", value: payload.purpose || "Без назначения", mono: false },
   ];
-  return <Modal open onClose={onClose} dismissible={!busy} wide title="Подтверждение операции"
-    description="Сверьте реквизиты. Они входят в обе подписи (WYSIWYS)."
-    footer={<div className="flex flex-wrap items-center justify-between gap-3">
-      <span className="mono-data text-ink-secondary">{remaining ? `Осталось ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}` : "Время истекло"}</span>
-      <Button disabled={!remaining || (risk.requiresAcknowledgement && !ack)} loading={busy} icon={<Fingerprint size={18} />} onClick={() => void sign()}>
-        {software ? "Подтвердить Software Key + ML-DSA" : "Подтвердить Passkey + ML-DSA"}</Button>
-    </div>}>
-    <div className="space-y-4">
-      <Card className="space-y-3"><dl className="grid gap-2 text-sm">
-        {fields.map(([label, value]) => <div key={label} className="grid gap-1 sm:grid-cols-[8rem_1fr]"><dt className="text-ink-muted">{label}</dt>
-          <dd className="break-words font-semibold [overflow-wrap:anywhere]">{value}</dd></div>)}</dl>
-        <div className="border-t border-border-default pt-3"><p className="type-label text-ink-muted">Сумма операции</p>
-          <p className="display-kpi">{formatTenge(payload.amountTenge)}</p></div><HashChip value={txHashHex} />
-        <details><summary className="cursor-pointer text-sm text-ink-secondary">Все подписываемые поля</summary>
-          <JsonDiffViewer json={prepared.canonicalJson} className="mt-2" /></details></Card>
-      <div className="grid grid-cols-2 gap-3"><Lock label={software ? "WebCrypto ECDSA" : "Passkey"} timing={timings?.webauthnMs} busy={busy} />
-        <Lock quantum label="ML-DSA-65" timing={timings?.pqSignMs} busy={busy} /></div>
-      {timings && <p role="status" className="text-sm text-ink-secondary">Обе подписи готовы и отправлены на проверку.</p>}
-      {risk.requiresAcknowledgement && <Card variant="warning"><h3 className="mb-2 type-h3">Экран отрезвления</h3>
-        <label className="flex items-start gap-3 text-sm"><input type="checkbox" checked={ack} disabled={busy} className="mt-1 size-4 shrink-0 accent-gold"
-          onChange={event => setAck(event.target.checked)} />Я подтверждаю, что совершаю операцию добровольно и мне сейчас не звонят из полиции, Нацбанка, КНБ или службы безопасности.</label></Card>}
-      {armed && <Card variant="danger" role="alert"><p className="text-sm font-semibold text-danger-text">⚡ Перехватчик взведён: после вашей подписи пакет будет изменён в пути ({armed === "MITM_AMOUNT" ? "сумма → 500 000 ₸" : "получатель → дроппер"}).</p></Card>}
-      {risk.requiresCoSign && <p className="text-sm text-amber-300">После вашей подписи запрос получит Вторая рука.</p>}
-      {error && <ErrorCard error={error} action={!software && <Button variant="secondary" onClick={onFallback}>Использовать Software Key</Button>} />}
-    </div>
-  </Modal>;
+
+  const lock1State = stage === "mldsa" || stage === "sending" ? "signed" : stage === "webauthn" ? "signing" : "idle";
+  const lock2State = stage === "sending" ? "signed" : stage === "mldsa" ? "signing" : "idle";
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      dismissible={!busy}
+      wide
+      title="Подтверждение операции (WYSIWYS)"
+      description="Вы подписываете ровно эти реквизиты — подмена в пути математически невозможна."
+      footer={
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span className="mono-data text-ink-secondary">
+            {remaining ? `Осталось ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}` : "Время истекло"}
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="ghost" onClick={onClose} disabled={busy}>Отмена</Button>
+            <Button
+              disabled={!remaining || (risk.requiresAcknowledgement && !ack)}
+              loading={busy}
+              icon={<Fingerprint size={18} />}
+              onClick={() => void sign()}
+            >
+              {software ? "Подтвердить Software Key + ML-DSA" : "Подтвердить Passkey + ML-DSA"}
+            </Button>
+          </div>
+        </div>
+      }
+    >
+      <div className="space-y-4">
+        <Card className="space-y-3">
+          <dl className="grid gap-2 text-sm">
+            {fields.map(({ label, value, mono }) => (
+              <div key={label} className="grid gap-1 sm:grid-cols-[8.5rem_1fr]">
+                <dt className="text-ink-muted">{label}</dt>
+                <dd className={`break-words font-semibold [overflow-wrap:anywhere] ${mono ? "font-mono tabular-nums text-ink-primary" : ""}`}>
+                  {value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+          <div className="border-t border-border-default pt-3">
+            <p className="type-label text-ink-muted">Сумма к списанию</p>
+            <p className="font-mono text-[2rem] font-extrabold leading-tight tracking-tight tabular-nums text-ink-primary">
+              {formatTenge(payload.amountTenge)}
+            </p>
+          </div>
+          <HashChip value={txHashHex} label="Контрольный SHA-256" />
+          <details>
+            <summary className="cursor-pointer rounded text-sm font-medium text-ink-secondary hover:text-ink-primary">
+              Все подписываемые поля (Canonical JSON)
+            </summary>
+            <JsonDiffViewer json={prepared.canonicalJson} className="mt-2" />
+          </details>
+        </Card>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <LockTile
+            label={software ? "Замок 1 · WebCrypto ECDSA" : "Замок 1 · Passkey"}
+            subtitle={`Привязан к: ${payload.rpId}`}
+            state={lock1State}
+            timing={timings?.webauthnMs}
+          />
+          <LockTile
+            quantum
+            label="Замок 2 · ML-DSA-65"
+            subtitle="Post-Quantum FIPS 204 · 3 309 Б"
+            state={lock2State}
+            timing={timings?.pqSignMs}
+          />
+        </div>
+
+        {mitmIntercepted ? (
+          <p role="alert" className="rounded-xl border border-danger/55 bg-danger/15 px-3.5 py-2 text-sm font-semibold text-danger-text">
+            ⚡ MITM перехватил и изменил пакет в пути! Отправляем на 7-шаговую верификацию сервера…
+          </p>
+        ) : stage === "sending" && (
+          <p role="status" className="text-sm font-medium text-bcc">
+            Оба криптозамка сомкнуты — отправлено на 7-шаговую верификацию сервера…
+          </p>
+        )}
+
+        {risk.requiresAcknowledgement && (
+          <Card variant="warning">
+            <h3 className="mb-2 type-h3">Экран отрезвления</h3>
+            <label className="flex cursor-pointer items-start gap-3 text-sm">
+              <input
+                type="checkbox"
+                checked={ack}
+                disabled={busy}
+                className="mt-1 size-4 shrink-0 accent-gold"
+                onChange={event => setAck(event.target.checked)}
+              />
+              <span>Я подтверждаю, что совершаю операцию добровольно и мне сейчас не звонят из полиции, Нацбанка, КНБ или службы безопасности.</span>
+            </label>
+          </Card>
+        )}
+
+        {armed && !mitmIntercepted && (
+          <Card variant="danger" role="alert">
+            <p className="text-sm font-semibold text-danger-text">
+              ⚡ Перехватчик взведён: после вашей подписи пакет будет изменён в пути (
+              {armed === "MITM_AMOUNT" ? `сумма → ${formatTenge(MITM_AMOUNT_TENGE)}` : "получатель → дроппер"}).
+            </p>
+          </Card>
+        )}
+
+        {risk.requiresCoSign && (
+          <p className="text-sm font-medium text-amber-300">
+            После вашей подписи запрос мгновенно получит «Вторая рука» для подтверждения 2-of-2.
+          </p>
+        )}
+
+        {error && (
+          <ErrorCard
+            error={error}
+            action={!software && <Button size="sm" variant="secondary" onClick={onFallback}>Использовать Software Key</Button>}
+          />
+        )}
+      </div>
+    </Modal>
+  );
 }

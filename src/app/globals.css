@@ -70,6 +70,7 @@
 @layer base {
   body {
     min-height: 100dvh;
+    overflow-x: clip;
     background: var(--gradient-canvas-mesh);
     color: var(--text-primary);
     font-family: var(--font-sans);
@@ -77,8 +78,8 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  :where(a, button, input, select, textarea, summary):focus-visible {
-    outline: 2px solid var(--accent-primary);
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid rgba(0, 208, 132, 0.85);
     outline-offset: 2px;
   }
 

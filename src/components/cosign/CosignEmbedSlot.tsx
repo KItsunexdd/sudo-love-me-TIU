@@ -4,33 +4,113 @@ import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ExternalLink, Smartphone } from "lucide-react";
-import { Card, ErrorCard, Spinner } from "@/components/ui";
+import { ExternalLink, QrCode, Smartphone } from "lucide-react";
+import { Button, ErrorCard, Modal, PhoneFrame, Skeleton } from "@/components/ui";
 import { useDemoMode } from "@/components/shell/DemoModeProvider";
 
-function OpenCosign({ cosignerUserId }: { cosignerUserId: string }) {
+function SecondPhoneTrigger({ cosignerUserId }: { cosignerUserId: string }) {
   const { mode } = useDemoMode();
+  const [open, setOpen] = useState(false);
   const [image, setImage] = useState("");
   const [error, setError] = useState(false);
   const href = `/cosign?userId=${encodeURIComponent(cosignerUserId)}&mode=${mode}`;
+
   useEffect(() => {
+    if (!open) return;
     let active = true;
     setError(false);
     setImage("");
     const url = new URL(href, window.location.origin).href;
     void import("qrcode").then(async qr => {
-      const svg = await qr.toString(url, { type: "svg", width: 176, margin: 4 });
+      const svg = await qr.toString(url, { type: "svg", width: 200, margin: 3 });
       if (active) setImage("data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg));
     }).catch(() => { if (active) setError(true); });
     return () => { active = false; };
-  }, [href]);
-  return <Card className="grid justify-items-center gap-4 py-8 text-center">
-    <Smartphone className="text-gold" /><h2 className="type-h2">Вторая рука на отдельном экране</h2>
-    {image && <Image unoptimized width={176} height={176} alt="QR-код экрана Второй руки" src={image} className="rounded-xl" />}
-    {error && <ErrorCard error={{ failureCode: "ERR_QR", message: "Не удалось построить QR-код. Откройте ссылку ниже." }} />}
-    <Link href={href} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-bcc underline">Откройте /cosign <ExternalLink size={16} /></Link>
-    <p className="max-w-sm text-sm text-ink-secondary">Для второго телефона нужен адрес стенда, доступный с обоих устройств.</p>
-  </Card>;
+  }, [href, open]);
+
+  return (
+    <>
+      <div className="mx-auto flex w-full max-w-[400px] flex-wrap items-center justify-between gap-2 rounded-2xl border border-border-default bg-surface px-3.5 py-2.5">
+        <Button
+          size="sm"
+          variant="secondary"
+          icon={<QrCode className="size-4 text-bcc" />}
+          onClick={() => setOpen(true)}
+        >
+          Открыть на втором телефоне
+        </Button>
+        <Link
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex min-h-9 items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-[13px] font-semibold text-bcc transition-colors hover:bg-surface-hover hover:underline"
+        >
+          <span>/cosign</span>
+          <ExternalLink aria-hidden="true" className="size-3.5" />
+        </Link>
+      </div>
+
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Открыть на втором телефоне"
+        description="Отсканируйте QR-код камерой второго смартфона, чтобы принимать запросы «Второй руки» в реальном времени."
+        footer={
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Link
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-[10px] text-sm font-semibold text-bcc hover:underline"
+            >
+              Открыть /cosign в новой вкладке <ExternalLink aria-hidden="true" className="size-4" />
+            </Link>
+            <Button size="sm" variant="secondary" onClick={() => setOpen(false)}>Закрыть</Button>
+          </div>
+        }
+      >
+        <div className="grid justify-items-center gap-4 text-center">
+          <span className="grid size-11 place-items-center rounded-xl border border-gold/40 bg-gold/10 text-gold">
+            <Smartphone aria-hidden="true" className="size-5" />
+          </span>
+          {image ? (
+            <Image
+              unoptimized
+              width={200}
+              height={200}
+              alt="QR-код экрана Второй руки"
+              src={image}
+              className="rounded-xl border border-border-strong bg-white p-1"
+            />
+          ) : error ? (
+            <ErrorCard error={{ failureCode: "ERR_QR", message: "Не удалось построить QR-код. Откройте ссылку ниже." }} />
+          ) : (
+            <Skeleton className="size-[200px] rounded-xl" />
+          )}
+          <p className="max-w-sm text-xs leading-relaxed text-ink-secondary">
+            Для реального второго смартфона откройте стенд по HTTPS-адресу, доступному обоим устройствам.
+          </p>
+        </div>
+      </Modal>
+    </>
+  );
+}
+
+function EmbedSkeleton() {
+  return (
+    <PhoneFrame preset="compact">
+      <div aria-busy="true" aria-label="Открываем экран Второй руки" className="space-y-3 p-3">
+        <div className="flex items-center gap-2.5">
+          <Skeleton className="size-9 rounded-xl" />
+          <div className="flex-1 space-y-1.5">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-3 w-44" />
+          </div>
+        </div>
+        <Skeleton className="h-32 w-full rounded-xl" />
+      </div>
+    </PhoneFrame>
+  );
 }
 
 // The sibling module is supplied by the independent Co-Sign feature.
@@ -43,8 +123,13 @@ const Live = dynamic<{ cosignerUserId: string }>(async () => {
   } catch {
     return noEmbed;
   }
-}, { ssr: false, loading: () => <Spinner label="Открываем экран Второй руки…" /> });
+}, { ssr: false, loading: () => <EmbedSkeleton /> });
 
 export function CosignEmbedSlot({ userId }: { userId: string }) {
-  return <div className="space-y-3"><Live cosignerUserId={userId} /><OpenCosign cosignerUserId={userId} /></div>;
+  return (
+    <div className="space-y-2.5">
+      <Live cosignerUserId={userId} />
+      <SecondPhoneTrigger cosignerUserId={userId} />
+    </div>
+  );
 }
