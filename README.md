@@ -203,4 +203,3 @@ Apple M4, Node.js 26, по 200 замеров на операцию ([полна
 - [docs/JURY_QA.md](docs/JURY_QA.md) — ответы на вопросы жюри: безопасность, регулятор, экономика
 - [docs/DESIGN.md](docs/DESIGN.md) — дизайн-система интерфейса
 - [docs/BENCHMARKS.md](docs/BENCHMARKS.md) — замеры производительности
-- [BCC_SafeSign_TZ.md](BCC_SafeSign_TZ.md) — техническое задание
