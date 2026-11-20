@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/components/shell/LocaleProvider";
 import { useEffect, useRef, useState } from "react";
 import { CircleDot, Landmark, ShieldCheck, Snowflake, Users } from "lucide-react";
 import { useDemoMode } from "@/components/shell/DemoModeProvider";
@@ -27,6 +28,7 @@ type StandProps = {
 };
 
 function AccountCard({ sender, cosigner, mode }: Pick<StandProps, "sender" | "cosigner" | "mode">) {
+  const { t } = useT();
   const business = mode === "B2B";
   return (
     <section
@@ -43,7 +45,7 @@ function AccountCard({ sender, cosigner, mode }: Pick<StandProps, "sender" | "co
         </div>
         <span className="mono-data shrink-0 text-xs text-ink-secondary">KZT</span>
       </div>
-      {business && <p className="mt-0.5 text-xs text-ink-secondary">Бухгалтер · {sender.fullName}</p>}
+      {business && <p className="mt-0.5 text-xs text-ink-secondary">{t("demoStand.accountant")} {sender.fullName}</p>}
       <p className="mt-1.5 font-mono text-[clamp(1.65rem,2.4vw,2.25rem)] font-bold leading-tight tracking-tight tabular-nums">
         {formatTenge(sender.balanceTenge)}
       </p>
@@ -53,17 +55,18 @@ function AccountCard({ sender, cosigner, mode }: Pick<StandProps, "sender" | "co
       <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-border-strong/80 pt-2 text-xs text-ink-secondary">
         <span className="flex items-center gap-1">
           <ShieldCheck aria-hidden="true" size={14} className="text-bcc" />
-          {business ? "Директор" : "Вторая рука"} · {cosigner.fullName}
+          {business ? t("common.director") : t("common.secondHand")} · {cosigner.fullName}
         </span>
-        {!business && <span className="tabular-nums">Депозит · <strong className="font-mono font-semibold text-ink-primary">{formatTenge(sender.depositBalanceTenge)}</strong></span>}
+        {!business && <span className="tabular-nums">{t("demoStand.deposit")} <strong className="font-mono font-semibold text-ink-primary">{formatTenge(sender.depositBalanceTenge)}</strong></span>}
       </div>
     </section>
   );
 }
 
 function DemoStandSkeleton() {
+  const { t } = useT();
   return (
-    <main aria-busy="true" aria-label="Загружаем счета и панель стенда" className="shell-container grid items-start gap-4 py-3 min-[1100px]:grid-cols-[minmax(0,45fr)_minmax(0,55fr)] 2xl:gap-5 2xl:py-5">
+    <main aria-busy="true" aria-label={t("demoStand.loading")} className="shell-container grid items-start gap-4 py-3 min-[1100px]:grid-cols-[minmax(0,45fr)_minmax(0,55fr)] 2xl:gap-5 2xl:py-5">
       <PhoneFrame className="mx-auto max-w-[560px] min-[1100px]:max-w-none">
         <div className="space-y-2.5 p-2 md:px-3 md:pb-3 2xl:space-y-3 2xl:pb-4">
           <Skeleton className="h-32 w-full rounded-2xl" />
@@ -106,6 +109,7 @@ function DemoStandSkeleton() {
 }
 
 function DemoSession({ sender, cosigner, mode, presets, refresh }: StandProps) {
+  const { t, region } = useT();
   const business = mode === "B2B";
   const [tab, setTab] = useState<"panel" | "cosign">("panel");
   const [form, setForm] = useState<{ key: number; preset: PresetName }>({ key: 0, preset: business ? "supplier" : "son" });
@@ -244,7 +248,7 @@ function DemoSession({ sender, cosigner, mode, presets, refresh }: StandProps) {
     operationType: business ? "B2B_INVOICE" : "P2P_TRANSFER",
     purpose: "Бонус B+ (сайт-клон)",
   };
-  const connection = { connecting: "Подключение…", live: "SSE Live", polling: "Опрос сервера", offline: "Нет соединения" };
+  const connection = { connecting: t("common.connecting"), live: "SSE Live", polling: t("common.polling"), offline: t("common.offline") };
 
   return (
     <main className="shell-container grid items-start gap-4 py-3 min-[1100px]:grid-cols-[minmax(0,45fr)_minmax(0,55fr)] 2xl:gap-5 2xl:py-5">
@@ -253,15 +257,15 @@ function DemoSession({ sender, cosigner, mode, presets, refresh }: StandProps) {
           <AccountCard sender={sender} cosigner={cosigner} mode={mode} />
           {cooling && (
             <Card variant="warning" className="space-y-1 p-3">
-              <h2 className="flex items-center gap-2 type-h3"><Snowflake aria-hidden="true" size={17} /> Защитный режим охлаждения</h2>
+              <h2 className="flex items-center gap-2 type-h3"><Snowflake aria-hidden="true" size={17} /> {t("demoStand.cooling")}</h2>
               <p className="text-xs text-ink-secondary sm:text-sm">
-                После сигнала Второй руки операции временно приостановлены до <span className="font-mono tabular-nums">{new Date(coolingUntil).toLocaleString("ru-RU")}</span>.
+                {t("demoStand.suspended")} <span className="font-mono tabular-nums">{new Date(coolingUntil).toLocaleString(region)}</span>.
               </p>
             </Card>
           )}
-          {deviceError && <ErrorCard error={deviceError} action={<Button size="sm" onClick={() => setDeviceRevision(n => n + 1)}>Обновить устройства</Button>} />}
-          {unavailable && <ErrorCard error={{ failureCode: "ERR_CLIENT_KEYSTORE", message: "Не удалось открыть хранилище ключей браузера." }} />}
-          {live.error && <ErrorCard error={live.error} action={<Button size="sm" onClick={live.retry}>Обновить статус операции</Button>} />}
+          {deviceError && <ErrorCard error={deviceError} action={<Button size="sm" onClick={() => setDeviceRevision(n => n + 1)}>{t("demoStand.refreshDevices")}</Button>} />}
+          {unavailable && <ErrorCard error={{ failureCode: "ERR_CLIENT_KEYSTORE", message: t("demoStand.keystore") }} />}
+          {live.error && <ErrorCard error={live.error} action={<Button size="sm" onClick={live.retry}>{t("demoStand.refreshStatus")}</Button>} />}
           {receipt && attempt ? (
             <TransactionResult
               attemptId={attempt.id}
@@ -295,18 +299,18 @@ function DemoSession({ sender, cosigner, mode, presets, refresh }: StandProps) {
       <aside className="min-w-0 space-y-2.5 2xl:space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <SegmentedControl
-            label="Панели демо-стенда"
+            label={t("demoStand.panels")}
             value={tab}
             onChange={setTab}
             className="min-w-0 max-w-full [&_button]:whitespace-normal [&_button]:px-3 [&_button]:py-1.5"
             options={[
-              { value: "panel", label: "Панель хакера" },
+              { value: "panel", label: t("demoStand.hacker") },
               {
                 value: "cosign",
                 label: (
                   <span className="inline-flex items-center gap-1.5">
                     <Users aria-hidden="true" size={14} />
-                    Вторая рука (Co-Sign Live)
+                    {t("demoStand.cosign")}
                   </span>
                 ),
                 tone: "gold",
@@ -359,6 +363,7 @@ function DemoSession({ sender, cosigner, mode, presets, refresh }: StandProps) {
 }
 
 export function DemoStand() {
+  const { t } = useT();
   const { mode, senderId, cosignerId } = useDemoMode();
   const { users, loading, recipientPresets, error, refresh } = useDemoState(senderId);
   const { events } = useEventStream({ userId: senderId });
@@ -373,8 +378,8 @@ export function DemoStand() {
     return (
       <main className="shell-container py-6">
         <ErrorCard
-          error={error ?? { failureCode: "ERR_USER_NOT_FOUND", message: "Не удалось загрузить участников демо." }}
-          action={<Button size="sm" onClick={refresh}>Обновить</Button>}
+          error={error ?? { failureCode: "ERR_USER_NOT_FOUND", message: t("demoStand.participants") }}
+          action={<Button size="sm" onClick={refresh}>{t("common.refresh")}</Button>}
         />
       </main>
     );
@@ -384,7 +389,7 @@ export function DemoStand() {
     <>
       {error && (
         <div className="shell-container pt-3">
-          <ErrorCard error={error} action={<Button size="sm" onClick={refresh}>Обновить</Button>} />
+          <ErrorCard error={error} action={<Button size="sm" onClick={refresh}>{t("common.refresh")}</Button>} />
         </div>
       )}
       <DemoSession key={`${senderId}-${reset}`} sender={sender} cosigner={cosigner} mode={mode} presets={recipientPresets} refresh={refresh} />

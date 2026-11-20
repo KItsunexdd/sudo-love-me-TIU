@@ -1,5 +1,7 @@
 "use client";
 
+import type { Locale } from "@/lib/i18n";
+import { LocaleProvider } from "@/components/shell/LocaleProvider";
 import { MotionConfig } from "framer-motion";
 import { Suspense, useCallback, type ReactNode } from "react";
 import { resetAttackState } from "@/components/hacker/attacks";
@@ -20,22 +22,24 @@ function TabEventConnection() {
   const onReset = useCallback(() => {
     resetAttackState();
     void removeRevokedLocalDevices().catch(() => toast({
-      title: "Не удалось обновить локальное хранилище ключей", tone: "danger",
+      titleKey: "appProviders.keystore", tone: "danger",
     }));
   }, [toast]);
   useTabEventConnection(scope, path !== "/phishing-clone", onReset);
   return null;
 }
 
-export function AppProviders({ children }: { children: ReactNode }) {
+export function AppProviders({ children, initialLocale = "ru" }: { children: ReactNode; initialLocale?: Locale }) {
   return (
-    <MotionConfig reducedMotion="user">
-      <DemoModeProvider>
-        <ToastProvider>
-          <Suspense fallback={null}><TabEventConnection /></Suspense>
-          {children}
-        </ToastProvider>
-      </DemoModeProvider>
-    </MotionConfig>
+    <LocaleProvider initialLocale={initialLocale}>
+      <MotionConfig reducedMotion="user">
+        <DemoModeProvider>
+          <ToastProvider>
+            <Suspense fallback={null}><TabEventConnection /></Suspense>
+            {children}
+          </ToastProvider>
+        </DemoModeProvider>
+      </MotionConfig>
+    </LocaleProvider>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/components/shell/LocaleProvider";
 import { useId, type ReactNode } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 
@@ -13,6 +14,7 @@ interface ToggleProps {
 }
 
 export function Toggle({ checked, onChange, label, variant = "default", disabled, description }: ToggleProps) {
+  const { t } = useT();
   const id = useId();
   const reduce = useReducedMotion();
   const armed = variant === "attack" && checked;
@@ -31,7 +33,7 @@ export function Toggle({ checked, onChange, label, variant = "default", disabled
         <span id={`${id}-label`} className="font-semibold text-ink-primary">{label}</span>
         {description && <span id={`${id}-description`} className="mt-0.5 block text-xs">{description}</span>}
       </span>
-      {armed && <span className="rounded bg-danger/20 px-2 py-0.5 font-mono text-xs text-danger-text">ВКЛ</span>}
+      {armed && <span className="rounded bg-danger/20 px-2 py-0.5 font-mono text-xs text-danger-text">{t("toggle.on")}</span>}
     </div>
   );
 }

@@ -1,8 +1,7 @@
 import { demoParticipants } from "@/lib/demo/participants";
 import { bytesToHex, fromBase64, sha256 } from "@/lib/crypto/canonical";
+import type { Locale } from "@/lib/i18n";
 import type { Mode, SignatureBundle } from "@/lib/db/types";
-
-export const corporateRule = "Корпоративное правило: платежи от 500 000 ₸ подписывает директор";
 
 export function selectCosigner(mode: Mode, userId?: string | null) {
   return userId?.trim() || demoParticipants[mode].cosignerId;
@@ -14,9 +13,10 @@ export function cosignMode(mode: Mode, userId: string | null) {
   return mode;
 }
 
-export function cosignHref(mode: Mode, userId?: string | null) {
+export function cosignHref(mode: Mode, userId?: string | null, locale?: Locale) {
   const query = new URLSearchParams({ userId: selectCosigner(mode, userId) });
   if (mode === "B2B") query.set("mode", mode);
+  if (locale) query.set("lang", locale);
   return `/cosign?${query}`;
 }
 

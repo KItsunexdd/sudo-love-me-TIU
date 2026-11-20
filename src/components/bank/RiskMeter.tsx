@@ -1,5 +1,8 @@
 "use client";
 
+import type { Translate } from "@/lib/i18n";
+import { riskReason } from "@/lib/i18n/server-text";
+import { useT } from "@/components/shell/LocaleProvider";
 import { motion, useReducedMotion } from "framer-motion";
 import { Building2, Check, Moon, PhoneIncoming, TriangleAlert } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
@@ -7,11 +10,11 @@ import { riskLevel } from "@/lib/risk/engine";
 import type { RiskLevel } from "@/lib/db/types";
 import { SPRING_SMOOTH } from "@/lib/ui/motion";
 
-const tiers = {
-  LOW: { bar: "bg-bcc shadow-glow-bcc", text: "Мгновенная 1-of-1 подпись" },
-  MEDIUM: { bar: "bg-gold shadow-glow-gold", text: "Нужно подтверждение на Экране отрезвления" },
-  HIGH: { bar: "bg-danger shadow-glow-danger", text: "Требуется «Вторая рука» (Co-Sign 2-of-2)" },
-};
+const getTiers = (t: Translate) => ({
+  LOW: { bar: "bg-bcc shadow-glow-bcc", text: t("riskMeter.instant") },
+  MEDIUM: { bar: "bg-gold shadow-glow-gold", text: t("riskMeter.acknowledge") },
+  HIGH: { bar: "bg-danger shadow-glow-danger", text: t("riskMeter.cosign") },
+});
 
 const rules = {
   NEW_RECIPIENT: [30, TriangleAlert],
@@ -27,6 +30,8 @@ const rules = {
 export function RiskMeter({ score, level: assessedLevel, reasons = [], codes = [] }: {
   score: number; level?: RiskLevel; reasons?: readonly string[]; codes?: readonly string[];
 }) {
+  const { locale, t } = useT();
+  const tiers = getTiers(t);
   const reduce = useReducedMotion();
   const value = Number.isFinite(score) ? Math.min(100, Math.max(0, score)) : 0;
   const level = assessedLevel ?? riskLevel(value);
@@ -36,7 +41,7 @@ export function RiskMeter({ score, level: assessedLevel, reasons = [], codes = [
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold leading-snug 2xl:type-h3">
-          Оценка риска <span className="text-ink-muted">(Anti-Scam)</span>
+          {t("common.score")} <span className="text-ink-muted">(Anti-Scam)</span>
         </h3>
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-base font-bold tabular-nums 2xl:text-lg">{value} / 100</span>
@@ -46,7 +51,7 @@ export function RiskMeter({ score, level: assessedLevel, reasons = [], codes = [
 
       <div
         role="meter"
-        aria-label="Оценка риска"
+        aria-label={t("common.score")}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={value}
@@ -74,7 +79,7 @@ export function RiskMeter({ score, level: assessedLevel, reasons = [], codes = [
               return (
                 <li key={reason} className="flex items-center gap-1.5 rounded-lg border border-border-default bg-terminal px-2 py-1 text-xs text-ink-secondary">
                   <Icon aria-hidden="true" className="size-3.5 shrink-0 text-gold" />
-                  <span>{reason}</span>
+                  <span>{riskReason(locale, code, reason)}</span>
                   {match && <span className="shrink-0 font-mono font-semibold tabular-nums text-amber-300">+{match[0]}</span>}
                 </li>
               );
@@ -86,7 +91,7 @@ export function RiskMeter({ score, level: assessedLevel, reasons = [], codes = [
           <span className="text-ink-secondary">{text}</span>
           {value === 0 && (
             <span className="inline-flex items-center gap-1 font-medium text-bcc">
-              <Check aria-hidden="true" className="size-3.5" /> Доверенный получатель
+              <Check aria-hidden="true" className="size-3.5" /> {t("riskMeter.trusted")}
             </span>
           )}
         </div>

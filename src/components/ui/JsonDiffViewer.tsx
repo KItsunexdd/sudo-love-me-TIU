@@ -1,3 +1,7 @@
+"use client";
+
+import { russian, type Translate } from "@/lib/i18n";
+import { useT } from "@/components/shell/LocaleProvider";
 import { escapeDisplayControls } from "@/lib/crypto/canonical";
 import type { TamperDiff } from "@/lib/db/types";
 import { formatIban, formatTenge } from "@/lib/ui/format";
@@ -7,23 +11,23 @@ import { HashChip } from "./HashChip";
 const tokens = /("(?:[^"\\]|\\.)*")([ \t]*:)?|(-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b|\b(?:true|false|null)\b)/g;
 const criticalFields = new Set(["origin", "challenge", "amountTenge", "recipientAccount", "nonce"]);
 
-const fieldLabels: Record<string, string> = {
-  amountTenge: "Сумма операции",
-  recipientAccount: "Счёт получателя (IBAN)",
-  recipientName: "Получатель",
-  senderAccount: "Счёт отправителя (IBAN)",
-  purpose: "Назначение платежа",
-  operationType: "Тип операции",
-  currency: "Валюта",
-  rpId: "Домен (RP ID)",
-  nonce: "Одноразовый Nonce",
-};
+const getFieldLabels = (t: Translate): Record<string, string> => ({
+  amountTenge: t("common.operationAmount"),
+  recipientAccount: t("common.iban"),
+  recipientName: t("common.recipient"),
+  senderAccount: t("jsonDiffViewer.sender"),
+  purpose: t("jsonDiffViewer.purpose"),
+  operationType: t("common.type"),
+  currency: t("jsonDiffViewer.currency"),
+  rpId: t("jsonDiffViewer.domain"),
+  nonce: t("jsonDiffViewer.nonce"),
+});
 
-function serialize(value: unknown, json?: string) {
+function serialize(value: unknown, json?: string, t: Translate = russian) {
   try {
     return JSON.stringify(json === undefined ? value : JSON.parse(json), null, 2) ?? "—";
   } catch {
-    return json ?? "Данные недоступны";
+    return json ?? t("jsonDiffViewer.missing");
   }
 }
 
@@ -99,13 +103,15 @@ function JsonSyntax({ text }: { text: string }) {
 export function JsonDiffViewer({ value, json, tamperDiff = [], signedHash, receivedHash, className = "" }: {
   value?: unknown; json?: string; tamperDiff?: TamperDiff; signedHash?: string; receivedHash?: string; className?: string;
 }) {
+  const { t } = useT();
+  const fieldLabels = getFieldLabels(t);
   return (
     <div className={`min-w-0 overflow-hidden rounded-xl border border-border-default bg-terminal p-3.5 font-mono text-[13px] leading-relaxed ${className}`}>
       {(signedHash || receivedHash) && (
         <div className="mb-3 flex flex-wrap items-center gap-2">
-          {signedHash && <HashChip value={signedHash} label="Подписанный SHA-256" />}
-          {receivedHash && <HashChip value={receivedHash} label="Полученный SHA-256" tone={signedHash === receivedHash ? "success" : "danger"} />}
-          {signedHash && receivedHash && signedHash !== receivedHash && <Badge tone="danger">Хэши различаются</Badge>}
+          {signedHash && <HashChip value={signedHash} label={t("jsonDiffViewer.signedHash")} />}
+          {receivedHash && <HashChip value={receivedHash} label={t("jsonDiffViewer.receivedHash")} tone={signedHash === receivedHash ? "success" : "danger"} />}
+          {signedHash && receivedHash && signedHash !== receivedHash && <Badge tone="danger">{t("jsonDiffViewer.different")}</Badge>}
         </div>
       )}
       {tamperDiff.length > 0 ? (
@@ -117,21 +123,21 @@ export function JsonDiffViewer({ value, json, tamperDiff = [], signedHash, recei
                 <code className="break-all rounded bg-surface px-1.5 py-0.5 font-mono">{field}</code>
               </div>
               <div className="flex flex-wrap items-center gap-2 rounded-lg border-l-[3px] border-bcc bg-bcc/10 px-3 py-2 text-emerald-200 [overflow-wrap:anywhere]">
-                <span className="font-sans text-xs font-semibold uppercase tracking-wide text-bcc">✓ Подписано:</span>
+                <span className="font-sans text-xs font-semibold uppercase tracking-wide text-bcc">{t("jsonDiffViewer.signed")}</span>
                 {renderDiffValue(field, original)}
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border-l-[3px] border-danger bg-danger/[.18] px-3 py-2 text-danger-text">
                 <span className="flex flex-wrap items-center gap-2 [overflow-wrap:anywhere]">
-                  <span className="font-sans text-xs font-semibold uppercase tracking-wide">✕ Подмена MITM:</span>
+                  <span className="font-sans text-xs font-semibold uppercase tracking-wide">{t("jsonDiffViewer.tampered")}</span>
                   {renderDiffValue(field, tampered)}
                 </span>
-                <Badge tone="danger">Подменено</Badge>
+                <Badge tone="danger">{t("jsonDiffViewer.changed")}</Badge>
               </div>
             </li>
           ))}
         </ul>
       ) : (
-        <pre tabIndex={0} className="max-w-full overflow-auto rounded-lg"><code><JsonSyntax text={serialize(value, json)} /></code></pre>
+        <pre tabIndex={0} className="max-w-full overflow-auto rounded-lg"><code><JsonSyntax text={serialize(value, json, t)} /></code></pre>
       )}
     </div>
   );

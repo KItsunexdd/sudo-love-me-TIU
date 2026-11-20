@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/components/shell/LocaleProvider";
 import { motion, useReducedMotion } from "framer-motion";
 import { BarChart3 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
@@ -15,9 +16,7 @@ interface AttackBreakdownChartProps {
 }
 
 const SVG_WIDTH = 560;
-const LABEL_WIDTH = 152;
 const VALUE_WIDTH = 74;
-const BAR_MAX_WIDTH = SVG_WIDTH - LABEL_WIDTH - VALUE_WIDTH - 16;
 
 export function AttackBreakdownChart({
   items,
@@ -26,6 +25,9 @@ export function AttackBreakdownChart({
   onSelectCategory,
   projectorMode = false,
 }: AttackBreakdownChartProps) {
+  const { locale, t } = useT();
+  const labelWidth = locale === "kk" ? 195 : 152;
+  const barMaxWidth = SVG_WIDTH - labelWidth - VALUE_WIDTH - 16;
   const reduce = useReducedMotion();
   const rowHeight = projectorMode ? 42 : 34;
   const barHeight = projectorMode ? 18 : 14;
@@ -38,7 +40,7 @@ export function AttackBreakdownChart({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <BarChart3 aria-hidden="true" className="size-5 text-bcc" />
-            <h2 className="type-h2">Разбивка атак по типам</h2>
+            <h2 className="type-h2">{t("attackBreakdownChart.breakdown")}</h2>
           </div>
           <div className="flex items-center gap-2">
             {activeFilter !== "ALL" && activeFilter !== "OPERATIONS" && (
@@ -47,11 +49,11 @@ export function AttackBreakdownChart({
                 onClick={() => onSelectCategory("ALL")}
                 className="rounded-lg border border-border-strong bg-elevated px-2.5 py-1 text-xs font-semibold text-ink-secondary hover:text-ink-primary"
               >
-                Показать все
+                {t("attackBreakdownChart.showAll")}
               </button>
             )}
             <Badge tone={totalAttacks > 0 ? "danger" : "neutral"} className="font-mono tabular-nums">
-              Всего: {totalAttacks}
+              {t("attackBreakdownChart.total")} {totalAttacks}
             </Badge>
           </div>
         </div>
@@ -62,12 +64,12 @@ export function AttackBreakdownChart({
         <svg
           viewBox={`0 0 ${SVG_WIDTH} ${svgHeight}`}
           role="img"
-          aria-label={`Распределение отражённых атак по типам: всего ${totalAttacks}`}
+          aria-label={t("attackBreakdownChart.chart", { totalAttacks })}
           className="h-auto w-full min-w-[420px] select-none"
         >
           {/* Тонкие вертикальные направляющие */}
           {[0.25, 0.5, 0.75, 1].map(step => {
-            const x = LABEL_WIDTH + BAR_MAX_WIDTH * step;
+            const x = labelWidth + barMaxWidth * step;
             return (
               <line
                 key={step}
@@ -86,7 +88,7 @@ export function AttackBreakdownChart({
             const y = 8 + index * rowHeight;
             const barY = y + (rowHeight - barHeight) / 2;
             const ratio = item.count > 0 ? Math.max(0.05, item.count / maxCount) : 0;
-            const barWidth = BAR_MAX_WIDTH * ratio;
+            const barWidth = barMaxWidth * ratio;
             const selected = activeFilter === item.key;
             const dimmed = activeFilter !== "ALL" && activeFilter !== "OPERATIONS" && !selected;
 
@@ -96,7 +98,7 @@ export function AttackBreakdownChart({
                 role="button"
                 tabIndex={0}
                 aria-pressed={selected}
-                aria-label={`${item.label}: ${item.count} (${item.sharePercent}%). Нажмите, чтобы отфильтровать таблицу.`}
+                aria-label={t("attackBreakdownChart.filterBar", { label: item.label, count: item.count, sharePercent: item.sharePercent })}
                 onClick={() => onSelectCategory(selected ? "ALL" : item.key)}
                 onKeyDown={event => {
                   if (event.key === "Enter" || event.key === " ") {
@@ -139,9 +141,9 @@ export function AttackBreakdownChart({
 
                 {/* Трек */}
                 <rect
-                  x={LABEL_WIDTH}
+                  x={labelWidth}
                   y={barY}
-                  width={BAR_MAX_WIDTH}
+                  width={barMaxWidth}
                   height={barHeight}
                   rx={barHeight / 2}
                   fill="#050C0A"
@@ -152,7 +154,7 @@ export function AttackBreakdownChart({
                 {/* Заполнение столбца */}
                 {item.count > 0 && (
                   <motion.rect
-                    x={LABEL_WIDTH}
+                    x={labelWidth}
                     y={barY}
                     height={barHeight}
                     rx={barHeight / 2}
@@ -183,7 +185,7 @@ export function AttackBreakdownChart({
       </div>
 
       <p className="mt-2 text-xs text-ink-muted">
-        Нажмите на любой столбец, чтобы отфильтровать таблицу инцидентов по этому вектору атаки.
+        {t("attackBreakdownChart.filterHint")}
       </p>
     </Card>
   );

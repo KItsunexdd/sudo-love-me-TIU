@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/components/shell/LocaleProvider";
 import { motion, useReducedMotion } from "framer-motion";
 import { CircleCheck, Clock, Hand, Microscope, Plus } from "lucide-react";
 import type { ApiError } from "@/lib/client/api";
@@ -13,11 +14,12 @@ export function TransactionResult({ attemptId, record, error, http, cosigner, on
   attemptId?: string; record?: TransactionRecord; error?: ApiError; http?: number; cosigner?: string;
   onInspect: (attemptError?: ApiError) => void; onNew: () => void; onCosign: () => void;
 }) {
+  const { t } = useT();
   const reduce = useReducedMotion();
   const actions = (
     <div className="flex flex-wrap gap-2">
-      <Button variant="secondary" size="sm" icon={<Microscope size={15} />} onClick={() => onInspect()}>Открыть Crypto Inspector</Button>
-      <Button variant="ghost" size="sm" icon={<Plus size={15} />} onClick={onNew}>Новая операция</Button>
+      <Button variant="secondary" size="sm" icon={<Microscope size={15} />} onClick={() => onInspect()}>{t("common.inspect")}</Button>
+      <Button variant="ghost" size="sm" icon={<Plus size={15} />} onClick={onNew}>{t("transactionResult.new")}</Button>
     </div>
   );
 
@@ -35,7 +37,7 @@ export function TransactionResult({ attemptId, record, error, http, cosigner, on
   if (error && (!record || record.status === "CHALLENGE_ISSUED")) return <ErrorCard error={error} action={actions} />;
   if (!record) {
     return (
-      <Card aria-busy="true" aria-label="Уточняем статус операции" className="space-y-3">
+      <Card aria-busy="true" aria-label={t("transactionResult.checking")} className="space-y-3">
         <Skeleton className="h-6 w-36 rounded-full" />
         <Skeleton className="h-8 w-44" />
         <Skeleton className="h-4 w-64" />
@@ -49,12 +51,12 @@ export function TransactionResult({ attemptId, record, error, http, cosigner, on
   const executed = record.status === "EXECUTED";
   const Icon = waiting ? Clock : executed ? CircleCheck : Hand;
   const titles = {
-    EXECUTED: "Операция выполнена без SMS",
-    PENDING_COSIGN: "Ожидает Вторую руку",
-    BLOCKED_BY_COSIGNER: "Вторая рука остановила операцию",
-    EXPIRED: "Время подтверждения истекло",
-    CHALLENGE_ISSUED: "Ожидает подписи",
-    REJECTED_CRYPTO: "Атака отражена",
+    EXECUTED: t("transactionResult.success"),
+    PENDING_COSIGN: t("transactionResult.pending"),
+    BLOCKED_BY_COSIGNER: t("transactionResult.blocked"),
+    EXPIRED: t("transactionResult.expired"),
+    CHALLENGE_ISSUED: t("common.unsigned"),
+    REJECTED_CRYPTO: t("common.repelled"),
   };
   const verifyMs = record.primarySignature?.verifyTimeMs;
 
@@ -78,12 +80,12 @@ export function TransactionResult({ attemptId, record, error, http, cosigner, on
         </div>
         {(waiting || stopped) && (
           <div className="space-y-1 text-sm">
-            <p>{waiting ? "Запрос на подпись" : "Решение принял участник"} · <span className="font-semibold">{cosigner}</span></p>
+            <p>{waiting ? t("transactionResult.request") : t("transactionResult.decided")} · <span className="font-semibold">{cosigner}</span></p>
             <p className="text-ink-secondary">
               {waiting ? (
-                <>Риск <span className="font-mono font-semibold tabular-nums text-amber-300">{record.riskScore}/100</span>. Перевод приостановлен до второй подписи. Доступный остаток проверим при исполнении.</>
+                <>{t("common.risk")} <span className="font-mono font-semibold tabular-nums text-amber-300">{record.riskScore}/100</span>{t("transactionResult.paused")}</>
               ) : (
-                "Деньги остались на счёте в полной сохранности."
+                t("transactionResult.safe")
               )}
             </p>
           </div>
@@ -91,14 +93,14 @@ export function TransactionResult({ attemptId, record, error, http, cosigner, on
         {executed && (
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-sm font-medium text-bcc">
-              {record.cosignSignature ? "Обе стороны подтвердили операцию 2-of-2." : "WebAuthn и ML-DSA-65 проверены."}
+              {record.cosignSignature ? t("transactionResult.both") : t("transactionResult.verified")}
             </p>
-            {verifyMs !== undefined && <LatencyBadge ms={verifyMs} label="Проверка" tone="success" />}
+            {verifyMs !== undefined && <LatencyBadge ms={verifyMs} label={t("common.verification")} tone="success" />}
           </div>
         )}
         {record.failureCode && <p className="mono-data font-bold text-danger-text">{record.failureCode}</p>}
         <HashChip value={record.txHashHex} />
-        {waiting && <Button variant="warning" size="sm" onClick={onCosign}>Открыть экран Второй руки</Button>}
+        {waiting && <Button variant="warning" size="sm" onClick={onCosign}>{t("transactionResult.openCosign")}</Button>}
         {actions}
       </Card>
     </motion.div>

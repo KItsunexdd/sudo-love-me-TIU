@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/components/shell/LocaleProvider";
 import { Fingerprint, KeyRound } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, Card, ErrorCard, SegmentedControl } from "@/components/ui";
@@ -14,6 +15,7 @@ const keyOptions = [
 ] as const satisfies readonly Segment<"passkey" | "software">[];
 
 export function useCosignDevice(userId: string, syncVersion: number, resyncVersion: number, resetId?: number) {
+  const { t } = useT();
   const local = useLocalDevices();
   const [server, setServer] = useState<{ ids: Set<string>; resetId?: number }>();
   const [error, setError] = useState<ApiError | null>(null);
@@ -39,13 +41,14 @@ export function useCosignDevice(userId: string, syncVersion: number, resyncVersi
     devices,
     loading: local.loading || (hasLocal && !serverIds && !error),
     error: local.unavailable ? {
-      status: "ERROR", failureCode: "ERR_CLIENT_KEYSTORE", message: "Хранилище ключей браузера недоступно.",
+      status: "ERROR", failureCode: "ERR_CLIENT_KEYSTORE", message: t("cosignDevicePanel.keystore"),
     } : error,
     retry: () => setRetryVersion(version => version + 1),
   };
 }
 
 export function CosignDevicePanel({ userId }: { userId: string }) {
+  const { t } = useT();
   const [choice, setChoice] = useState<"passkey" | "software">("passkey");
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
@@ -70,13 +73,13 @@ export function CosignDevicePanel({ userId }: { userId: string }) {
     <Card variant="elevated" className="space-y-3">
       <div className="flex items-center gap-2">
         <KeyRound aria-hidden="true" className="size-4 text-bcc" />
-        <h3 className="type-h3">Устройство для второй подписи</h3>
+        <h3 className="type-h3">{t("cosignDevicePanel.secondDevice")}</h3>
       </div>
-      <p className="text-sm text-ink-secondary">Выберите ключ устройства. SafeSign добавит к нему подпись ML-DSA-65.</p>
-      <SegmentedControl label="Способ подписи" className="w-full" value={choice} options={keyOptions} onChange={setChoice} />
-      {choice === "software" && <p className="text-xs text-ink-secondary">Software Key использует WebCrypto. На втором телефоне откройте стенд по HTTPS.</p>}
+      <p className="text-sm text-ink-secondary">{t("cosignDevicePanel.choose")}</p>
+      <SegmentedControl label={t("cosignDevicePanel.method")} className="w-full" value={choice} options={keyOptions} onChange={setChoice} />
+      {choice === "software" && <p className="text-xs text-ink-secondary">{t("cosignDevicePanel.https")}</p>}
       <Button className="w-full" variant="secondary" loading={busy} icon={<Fingerprint className="size-4" />} onClick={() => void register()}>
-        Привязать устройство
+        {t("common.enroll")}
       </Button>
       {error && <ErrorCard error={error} />}
     </Card>

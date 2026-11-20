@@ -1,5 +1,7 @@
 "use client";
 
+import type { Translate } from "@/lib/i18n";
+import { useT } from "@/components/shell/LocaleProvider";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
@@ -36,6 +38,7 @@ import { SocEventDetailDrawer } from "./SocEventDetailDrawer";
 import {
   buildAttackBreakdown,
   classifyEventCategory,
+  eventSummary,
   extractFailureCode,
   formatEventTime,
   getEventMeta,
@@ -45,35 +48,39 @@ import {
 
 type SocReportData = Awaited<ReturnType<typeof socReport>>;
 
-const CONNECTION_BADGES: Record<
+const getConnectionBadges = (t: Translate): Record<
   ConnectionStatus,
   { label: string; tone: "neutral" | "success" | "warning" | "danger"; pulse: boolean }
-> = {
-  connecting: { label: "Подключение…", tone: "neutral", pulse: true },
+> => ({
+  connecting: { label: t("common.connecting"), tone: "neutral", pulse: true },
   live: { label: "SSE Live", tone: "success", pulse: true },
-  polling: { label: "Опрос сервера", tone: "warning", pulse: true },
-  offline: { label: "Нет соединения", tone: "danger", pulse: false },
-};
+  polling: { label: t("common.polling"), tone: "warning", pulse: true },
+  offline: { label: t("common.offline"), tone: "danger", pulse: false },
+});
 
-const SEVERITY_OPTIONS: readonly Segment<SocSeverityFilter>[] = [
-  { value: "ALL", label: "Все уровни" },
-  { value: "CRITICAL", label: "АТАКА" },
-  { value: "WARNING", label: "РИСК" },
-  { value: "INFO", label: "ИНФО" },
-];
+const getSeverityOptions = (t: Translate): readonly Segment<SocSeverityFilter>[] => ([
+  { value: "ALL", label: t("socDashboard.allLevels") },
+  { value: "CRITICAL", label: t("common.attack") },
+  { value: "WARNING", label: t("common.riskBadge") },
+  { value: "INFO", label: t("common.info") },
+]);
 
-const TYPE_FILTER_CHIPS: readonly { value: SocTypeFilter; label: string }[] = [
-  { value: "ALL", label: "Все события" },
-  { value: "MITM_AMOUNT", label: "MITM сумма" },
+const getTypeFilterChips = (t: Translate): readonly { value: SocTypeFilter; label: string }[] => ([
+  { value: "ALL", label: t("socDashboard.allEvents") },
+  { value: "MITM_AMOUNT", label: t("common.mitmAmount") },
   { value: "MITM_RECIPIENT", label: "MITM IBAN" },
   { value: "REPLAY", label: "Replay" },
   { value: "PHISHING_ORIGIN", label: "Phishing / Origin" },
-  { value: "SOCIAL_ENGINEERING", label: "Социнженерия" },
-  { value: "PQ_SIGNATURE", label: "Квант" },
-  { value: "OPERATIONS", label: "Операции без SMS" },
-];
+  { value: "SOCIAL_ENGINEERING", label: t("common.social") },
+  { value: "PQ_SIGNATURE", label: t("socDashboard.quantum") },
+  { value: "OPERATIONS", label: t("socDashboard.smsFree") },
+]);
 
 export function SocDashboard() {
+  const { t, locale } = useT();
+  const typeFilterChips = getTypeFilterChips(t);
+  const severityOptions = getSeverityOptions(t);
+  const connectionBadges = getConnectionBadges(t);
   const { mode } = useDemoMode();
   const { lastEvent, status: connectionStatus, syncVersion, resyncVersion } = useEventStream({ channel: "soc" });
   const reduce = useReducedMotion();
@@ -189,8 +196,8 @@ export function SocDashboard() {
   const mlDsaWithinTarget = mlDsa.count === 0 || mlDsa.averageMs < 25;
 
   const breakdown = useMemo(
-    () => buildAttackBreakdown(aggregates?.blockedByType ?? {}),
-    [aggregates?.blockedByType],
+    () => buildAttackBreakdown(aggregates?.blockedByType ?? {}, t),
+    [aggregates?.blockedByType, t],
   );
 
   const countsByFilter = useMemo(() => {
@@ -219,12 +226,12 @@ export function SocDashboard() {
       if (typeFilter !== "ALL" && classifyEventCategory(item) !== typeFilter) return false;
       if (needle) {
         const failureCode = extractFailureCode(item) ?? "";
-        const haystack = `${item.txId ?? ""} ${item.actorName} ${item.summary} ${failureCode} ${getEventMeta(item).label}`.toLowerCase();
+        const haystack = `${item.txId ?? ""} ${item.actorName} ${eventSummary(item, locale)} ${failureCode} ${getEventMeta(item, t).label}`.toLowerCase();
         if (!haystack.includes(needle)) return false;
       }
       return true;
     });
-  }, [events, severityFilter, typeFilter, searchQuery]);
+  }, [events, severityFilter, typeFilter, searchQuery, t, locale]);
 
   const hasActiveFilters = typeFilter !== "ALL" || severityFilter !== "ALL" || searchQuery.trim().length > 0;
 
@@ -234,7 +241,7 @@ export function SocDashboard() {
     setSearchQuery("");
   }
 
-  const conn = CONNECTION_BADGES[connectionStatus];
+  const conn = connectionBadges[connectionStatus];
   const kpiNumberClass = projectorMode
     ? "font-mono text-4xl font-extrabold leading-none tabular-nums xl:text-5xl"
     : "display-kpi";
@@ -247,7 +254,7 @@ export function SocDashboard() {
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-bcc/40 bg-bcc/[.12] px-3 py-1 text-xs font-semibold text-emerald-300">
               <Activity aria-hidden="true" className="size-3.5" />
-              Security Operations Center
+              {t("socDashboard.center")}
             </span>
             <Badge tone={conn.tone}>
               <span
@@ -257,14 +264,14 @@ export function SocDashboard() {
               {conn.label}
             </Badge>
             {projectorMode && (
-              <Badge tone="info">Проектор · 5 м</Badge>
+              <Badge tone="info">{t("socDashboard.projectorBadge")}</Badge>
             )}
           </div>
           <h1 className={projectorMode ? "mt-2 text-3xl font-extrabold tracking-tight" : "type-h1 mt-2"}>
-            SOC-центр БЦК
+            {t("socDashboard.heading")}
           </h1>
           <p className={`mt-1 text-ink-secondary ${projectorMode ? "text-base" : "text-sm"}`}>
-            Мониторинг отражённых атак, спасённых средств и производительности гибридной криптоподписи в реальном времени.
+            {t("socDashboard.intro")}
           </p>
         </div>
 
@@ -276,7 +283,7 @@ export function SocDashboard() {
             aria-pressed={projectorMode}
             onClick={() => setProjectorMode(value => !value)}
           >
-            {projectorMode ? "Режим проектора: ВКЛ" : "Режим проектора"}
+            {projectorMode ? t("socDashboard.projectorOn") : t("socDashboard.projector")}
           </Button>
           <Button
             size="sm"
@@ -285,7 +292,7 @@ export function SocDashboard() {
             icon={<RefreshCw className="size-4" />}
             onClick={() => void loadReport(undefined, { manual: true })}
           >
-            Обновить
+            {t("common.refresh")}
           </Button>
         </div>
       </div>
@@ -296,19 +303,19 @@ export function SocDashboard() {
           error={error}
           action={
             <Button size="sm" variant="secondary" onClick={() => void loadReport(undefined, { manual: true })}>
-              Повторить загрузку
+              {t("socDashboard.retry")}
             </Button>
           }
         />
       )}
 
       {/* 4 KPI-карточки в реальном времени */}
-      <section aria-label="Ключевые показатели SOC" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section aria-label={t("socDashboard.kpis")} className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {/* KPI 1: Атак отражено */}
         <Card variant={(aggregates?.attacksBlocked ?? 0) > 0 ? "danger" : "default"}>
           <div className="flex items-center justify-between gap-2">
             <span className={`font-semibold uppercase tracking-wider text-ink-secondary ${projectorMode ? "text-sm" : "text-xs"}`}>
-              Атак отражено
+              {t("socDashboard.attacks")}
             </span>
             <span className="grid size-9 place-items-center rounded-xl border border-danger/40 bg-danger/[.14] text-danger-text">
               <ShieldAlert aria-hidden="true" className="size-5" />
@@ -325,10 +332,10 @@ export function SocDashboard() {
             </div>
           )}
           <p className={`mt-2 font-medium text-ink-secondary ${projectorMode ? "text-sm" : "text-xs"}`}>
-            Объём атакованных операций · {formatTenge(aggregates?.attackedAmountTenge ?? 0)}
+            {t("socDashboard.attacked")} {formatTenge(aggregates?.attackedAmountTenge ?? 0)}
           </p>
           <p className={`mt-1 font-medium text-ink-secondary ${projectorMode ? "text-sm" : "text-xs"}`}>
-            Предотвращено подмен на сумму · {formatTenge(aggregates?.preventedTamperAmountTenge ?? 0)}
+            {t("socDashboard.tampering")} {formatTenge(aggregates?.preventedTamperAmountTenge ?? 0)}
           </p>
         </Card>
 
@@ -336,7 +343,7 @@ export function SocDashboard() {
         <Card variant={(aggregates?.savedAmountTenge ?? 0) > 0 ? "success" : "default"}>
           <div className="flex items-center justify-between gap-2">
             <span className={`font-semibold uppercase tracking-wider text-ink-secondary ${projectorMode ? "text-sm" : "text-xs"}`}>
-              Спасено от мошенничества
+              {t("socDashboard.saved")}
             </span>
             <span className="grid size-9 place-items-center rounded-xl border border-bcc/40 bg-bcc/[.12] text-bcc">
               <Wallet aria-hidden="true" className="size-5" />
@@ -353,7 +360,7 @@ export function SocDashboard() {
             </div>
           )}
           <p className={`mt-2 font-medium text-ink-secondary ${projectorMode ? "text-sm" : "text-xs"}`}>
-            Отклонено Второй рукой и предотвращено повторных списаний
+            {t("socDashboard.blocked")}
           </p>
         </Card>
 
@@ -361,7 +368,7 @@ export function SocDashboard() {
         <Card variant="default">
           <div className="flex items-center justify-between gap-2">
             <span className={`font-semibold uppercase tracking-wider text-ink-secondary ${projectorMode ? "text-sm" : "text-xs"}`}>
-              Подписано без SMS
+              {t("common.signed")}
             </span>
             <span className="grid size-9 place-items-center rounded-xl border border-bcc/40 bg-bcc/[.12] text-emerald-300">
               <ShieldCheck aria-hidden="true" className="size-5" />
@@ -378,7 +385,7 @@ export function SocDashboard() {
             </div>
           )}
           <p className={`mt-2 font-medium text-ink-secondary ${projectorMode ? "text-sm" : "text-xs"}`}>
-            0 SMS отправлено · 0 ₸ операторам связи
+            {t("socDashboard.noSms")}
           </p>
         </Card>
 
@@ -386,7 +393,7 @@ export function SocDashboard() {
         <Card variant="elevated" className="border-quantum/35">
           <div className="flex items-center justify-between gap-2">
             <span className={`font-semibold uppercase tracking-wider text-ink-secondary ${projectorMode ? "text-sm" : "text-xs"}`}>
-              Ср. время проверки ML-DSA (мс)
+              {t("socDashboard.mean")}
             </span>
             <span className="grid size-9 place-items-center rounded-xl border border-quantum/40 bg-quantum/[.12] text-quantum">
               <Cpu aria-hidden="true" className="size-5" />
@@ -408,7 +415,7 @@ export function SocDashboard() {
               p95: <span className="text-quantum">{mlDsa.count > 0 ? formatMs(mlDsa.p95Ms) : "—"}</span>
             </span>
             <Badge tone={mlDsaWithinTarget ? "success" : "warning"} className="font-mono">
-              ТЗ &lt; 25 мс
+              {t("socDashboard.target")}
             </Badge>
           </div>
         </Card>
@@ -446,10 +453,10 @@ export function SocDashboard() {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="type-h2 flex items-center gap-2">
                 <Zap aria-hidden="true" className="size-5 text-quantum" />
-                Бенчмарк: SMS vs SafeSign
+                {t("socDashboard.benchmark")}
               </h2>
               <Badge tone="info" className="font-mono tabular-nums">
-                {mlDsa.count} замеров
+                {mlDsa.count} {t("soc.samples.other", { count: mlDsa.count })}
               </Badge>
             </div>
           }
@@ -460,14 +467,14 @@ export function SocDashboard() {
             <div className="space-y-3">
               <div>
                 <div className="mb-1 flex items-center justify-between gap-2 text-xs">
-                  <span className="font-semibold text-ink-secondary">SMS-код (OTP)</span>
-                  <span className="font-mono font-bold tabular-nums text-danger-text">12–45 сек · {formatTenge(12)} / оп</span>
+                  <span className="font-semibold text-ink-secondary">{t("socDashboard.otp")}</span>
+                  <span className="font-mono font-bold tabular-nums text-danger-text">{t("socDashboard.duration")} {formatTenge(12)} {t("socDashboard.perOp")}</span>
                 </div>
                 <div className="h-3 w-full overflow-hidden rounded-full bg-terminal p-0.5">
                   <div className="h-full w-full rounded-full bg-danger/70" />
                 </div>
                 <p className="mt-1 text-xs text-ink-muted">
-                  Уязвим к фишингу, MITM-троянам, SIM-swap и социнженерии
+                  {t("socDashboard.exposure")}
                 </p>
               </div>
 
@@ -475,14 +482,14 @@ export function SocDashboard() {
                 <div className="mb-1 flex items-center justify-between gap-2 text-xs">
                   <span className="font-semibold text-emerald-300">BCC SafeSign (Passkey + ML-DSA-65)</span>
                   <span className="font-mono font-bold tabular-nums text-bcc">
-                    {mlDsa.count > 0 ? formatMs(hybridTotalAvgMs) : "< 5 мс"} · {formatTenge(0)} / оп
+                    {mlDsa.count > 0 ? formatMs(hybridTotalAvgMs) : "< 5 мс"} · {formatTenge(0)} {t("socDashboard.perOp")}
                   </span>
                 </div>
                 <div className="h-3 w-full overflow-hidden rounded-full bg-terminal p-0.5">
                   <div className="h-full w-[4%] min-w-[10px] rounded-full bg-bcc shadow-glow-bcc" />
                 </div>
                 <p className="mt-1 text-xs text-ink-muted">
-                  Аппаратная привязка Origin + WYSIWYS SHA-256 + NIST FIPS 204
+                  {t("socDashboard.binding")}
                 </p>
               </div>
             </div>
@@ -490,13 +497,13 @@ export function SocDashboard() {
             {/* Детальная телеметрия проверок */}
             <dl className="grid grid-cols-2 gap-3 rounded-xl border border-border-subtle bg-terminal p-3">
               <div>
-                <dt className="text-xs text-ink-muted">ML-DSA-65 (ср. / p95)</dt>
+                <dt className="text-xs text-ink-muted">{t("socDashboard.pqTiming")}</dt>
                 <dd className="mono-data mt-1 font-bold text-sky-300">
                   {loading ? <Skeleton className="h-5 w-24" /> : mlDsa.count > 0 ? `${formatMs(mlDsa.averageMs)} / ${formatMs(mlDsa.p95Ms)}` : "—"}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-ink-muted">WebAuthn (ср. / p95)</dt>
+                <dt className="text-xs text-ink-muted">{t("socDashboard.classicTiming")}</dt>
                 <dd className="mono-data mt-1 font-bold text-emerald-300">
                   {loading ? <Skeleton className="h-5 w-24" /> : webAuthn.count > 0 ? `${formatMs(webAuthn.averageMs)} / ${formatMs(webAuthn.p95Ms)}` : "—"}
                 </dd>
@@ -512,16 +519,16 @@ export function SocDashboard() {
           <div className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
-                <h2 className="type-h2">Журнал событий и атак</h2>
+                <h2 className="type-h2">{t("socDashboard.journal")}</h2>
                 <Badge tone="neutral" className="font-mono tabular-nums">
-                  {filteredEvents.length} из {events.length}
+                  {filteredEvents.length} {t("socDashboard.of")} {events.length}
                 </Badge>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
                 <SegmentedControl
-                  label="Фильтр по уровню угрозы"
-                  options={SEVERITY_OPTIONS}
+                  label={t("socDashboard.severity")}
+                  options={severityOptions}
                   value={severityFilter}
                   onChange={setSeverityFilter}
                 />
@@ -531,14 +538,14 @@ export function SocDashboard() {
                     className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted"
                   />
                   <label htmlFor="soc-search-input" className="sr-only">
-                    Поиск по txId, участнику или описанию
+                    {t("socDashboard.searchHint")}
                   </label>
                   <input
                     id="soc-search-input"
                     type="search"
                     value={searchQuery}
                     onChange={event => setSearchQuery(event.target.value)}
-                    placeholder="Поиск txId, актора…"
+                    placeholder={t("socDashboard.search")}
                     className="h-10 w-56 rounded-xl border border-border-default bg-terminal pl-9 pr-3 text-sm text-ink-primary placeholder:text-ink-muted transition-colors hover:border-border-strong focus-visible:border-bcc/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bcc/55"
                   />
                 </div>
@@ -546,11 +553,11 @@ export function SocDashboard() {
             </div>
 
             {/* Фильтр по типам событий */}
-            <div role="group" aria-label="Фильтр по типу события" className="flex flex-wrap items-center gap-1.5">
+            <div role="group" aria-label={t("socDashboard.filterType")} className="flex flex-wrap items-center gap-1.5">
               {[
-                ...TYPE_FILTER_CHIPS,
+                ...typeFilterChips,
                 ...(countsByFilter.OTHER_ATTACK > 0 || typeFilter === "OTHER_ATTACK"
-                  ? [{ value: "OTHER_ATTACK" as const, label: "Прочие крипто" }]
+                  ? [{ value: "OTHER_ATTACK" as const, label: t("common.other") }]
                   : []),
               ].map(chip => {
                 const count = countsByFilter[chip.value];
@@ -575,7 +582,7 @@ export function SocDashboard() {
 
               {hasActiveFilters && (
                 <Button size="sm" variant="ghost" onClick={resetFilters}>
-                  Сбросить фильтры
+                  {t("socDashboard.reset")}
                 </Button>
               )}
             </div>
@@ -592,25 +599,25 @@ export function SocDashboard() {
         ) : events.length === 0 ? (
           <EmptyState
             icon={Radar}
-            title="Пока тихо. Запустите атаку в Панели хакера"
-            description="Выполните перевод или активируйте любой из 6 сценариев атак на Демо-стенде — инциденты, криптотрассы и метрики ML-DSA-65 появятся здесь в реальном времени."
+            title={t("socDashboard.empty")}
+            description={t("socDashboard.emptyHint")}
             action={
               <Link
-                href={`/?mode=${mode}`}
+                href={`/?mode=${mode}&lang=${locale}`}
                 className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-bcc px-4 py-2 text-sm font-semibold text-ink-inverse shadow-glow-bcc transition hover:bg-bcc-hover"
               >
-                Открыть Демо-стенд
+                {t("socDashboard.openDemo")}
               </Link>
             }
           />
         ) : filteredEvents.length === 0 ? (
           <EmptyState
             icon={Filter}
-            title="Событий по этому фильтру нет"
-            description="Попробуйте сбросить фильтры по типу, уровню угрозы или поисковый запрос."
+            title={t("socDashboard.noMatches")}
+            description={t("socDashboard.clearHint")}
             action={
               <Button size="sm" variant="secondary" onClick={resetFilters}>
-                Сбросить фильтры
+                {t("socDashboard.reset")}
               </Button>
             }
           />
@@ -619,18 +626,18 @@ export function SocDashboard() {
             <table className="w-full min-w-[780px] border-collapse text-left">
               <thead>
                 <tr className="border-b border-border-default text-xs font-semibold uppercase tracking-wider text-ink-muted">
-                  <th scope="col" className="py-2.5 pl-3 pr-3">Время</th>
-                  <th scope="col" className="px-3 py-2.5">Уровень</th>
-                  <th scope="col" className="px-3 py-2.5">Тип</th>
-                  <th scope="col" className="px-3 py-2.5">Актор</th>
-                  <th scope="col" className="px-3 py-2.5 text-right">Сумма</th>
-                  <th scope="col" className="px-3 py-2.5">Описание</th>
-                  <th scope="col" className="py-2.5 pl-3 pr-3 text-right">Разбор</th>
+                  <th scope="col" className="py-2.5 pl-3 pr-3">{t("socDashboard.time")}</th>
+                  <th scope="col" className="px-3 py-2.5">{t("socDashboard.level")}</th>
+                  <th scope="col" className="px-3 py-2.5">{t("socDashboard.type")}</th>
+                  <th scope="col" className="px-3 py-2.5">{t("socDashboard.actor")}</th>
+                  <th scope="col" className="px-3 py-2.5 text-right">{t("common.amount")}</th>
+                  <th scope="col" className="px-3 py-2.5">{t("socDashboard.description")}</th>
+                  <th scope="col" className="py-2.5 pl-3 pr-3 text-right">{t("socDashboard.review")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-subtle">
                 {filteredEvents.map(item => {
-                  const meta = getEventMeta(item);
+                  const meta = getEventMeta(item, t);
                   const failureCode = extractFailureCode(item);
                   const highlighted = highlightedIds.has(item.id);
                   const highlightStyle = highlighted
@@ -657,7 +664,7 @@ export function SocDashboard() {
                       className={`cursor-pointer transition-colors duration-500 focus-visible:bg-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-bcc/80 ${highlightStyle}`}
                     >
                       <td className={`whitespace-nowrap py-3 pl-3 pr-3 font-mono tabular-nums text-ink-secondary ${projectorMode ? "text-sm" : "text-[13px]"}`}>
-                        {formatEventTime(item.timestamp)}
+                        {formatEventTime(item.timestamp, locale)}
                       </td>
                       <td className="whitespace-nowrap px-3 py-3">
                         <Badge status={item.severity} />
@@ -672,8 +679,8 @@ export function SocDashboard() {
                         {item.amountTenge !== undefined ? formatTenge(item.amountTenge) : "—"}
                       </td>
                       <td className={`max-w-[320px] px-3 py-3 text-ink-secondary ${projectorMode ? "text-sm" : "text-[13px]"}`}>
-                        <div className="truncate font-medium text-ink-primary" title={item.summary}>
-                          {item.summary}
+                        <div className="truncate font-medium text-ink-primary" title={eventSummary(item, locale)}>
+                          {eventSummary(item, locale)}
                         </div>
                         {failureCode && (
                           <div className="mt-0.5 font-mono text-xs text-danger-text">{failureCode}</div>
@@ -689,7 +696,7 @@ export function SocDashboard() {
                             setSelectedEvent(item);
                           }}
                         >
-                          Детали
+                          {t("socDashboard.details")}
                         </Button>
                       </td>
                     </motion.tr>

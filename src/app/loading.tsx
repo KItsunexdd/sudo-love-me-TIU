@@ -1,8 +1,12 @@
+"use client";
+
+import { useT } from "@/components/shell/LocaleProvider";
 import { Card, PhoneFrame, Skeleton } from "@/components/ui";
 
 export default function Loading() {
+  const { t } = useT();
   return (
-    <main aria-busy="true" aria-label="Загрузка раздела" className="shell-container grid items-start gap-5 py-3 min-[1100px]:grid-cols-[minmax(0,45fr)_minmax(0,55fr)] 2xl:py-5">
+    <main aria-busy="true" aria-label={t("loading.loading")} className="shell-container grid items-start gap-5 py-3 min-[1100px]:grid-cols-[minmax(0,45fr)_minmax(0,55fr)] 2xl:py-5">
       <PhoneFrame className="mx-auto max-w-[560px] min-[1100px]:max-w-none">
         <div className="space-y-3 p-2 md:px-3 md:pb-4">
           <Skeleton className="h-36 w-full rounded-2xl" />

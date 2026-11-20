@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { Card, Skeleton } from "@/components/ui";
-import { CosignCabinet } from "./CosignCabinet";
+import { CosignCabinet, CosignPageSkeleton } from "./CosignCabinet";
 
 export const metadata: Metadata = {
   title: "Вторая рука (Co-Sign)",
@@ -14,26 +13,6 @@ export const metadata: Metadata = {
   },
 };
 
-function CosignPageSkeleton() {
-  return (
-    <div aria-busy="true" aria-label="Открываем кабинет «Вторая рука»" className="space-y-3">
-      <div className="flex items-center gap-3">
-        <Skeleton className="size-10 rounded-xl" />
-        <div className="flex-1 space-y-1.5">
-          <Skeleton className="h-4 w-36" />
-          <Skeleton className="h-3.5 w-48" />
-        </div>
-      </div>
-      <Skeleton className="h-10 w-full rounded-xl" />
-      <Card className="space-y-3">
-        <Skeleton className="h-14 w-full rounded-xl" />
-        <Skeleton className="h-24 w-full rounded-xl" />
-        <Skeleton className="h-12 w-full rounded-[14px]" />
-        <Skeleton className="h-12 w-full rounded-[14px]" />
-      </Card>
-    </div>
-  );
-}
 
 export default function CosignPage() {
   return (

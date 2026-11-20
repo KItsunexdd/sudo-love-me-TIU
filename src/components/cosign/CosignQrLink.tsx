@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/components/shell/LocaleProvider";
 import { ExternalLink, QrCode } from "lucide-react";
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { useDemoMode } from "@/components/shell/DemoModeProvider";
@@ -24,6 +25,7 @@ function publicUrl(path: string, origin: string) {
 }
 
 function QrCanvas({ modules }: { modules: NonNullable<ReturnType<typeof cosignQrModules>> }) {
+  const { t } = useT();
   const canvas = useRef<HTMLCanvasElement>(null);
   const size = (modules.length + quietZone * 2) * modulePixels;
 
@@ -38,16 +40,17 @@ function QrCanvas({ modules }: { modules: NonNullable<ReturnType<typeof cosignQr
     }));
   }, [modules, size]);
 
-  return <canvas ref={canvas} width={size} height={size} role="img" aria-label="QR-код кабинета «Вторая рука»"
+  return <canvas ref={canvas} width={size} height={size} role="img" aria-label={t("cosignQrLink.qr")}
     className="size-36 max-w-full rounded-md bg-white [image-rendering:pixelated]" />;
 }
 
 export function CosignQrLink({ cosignerUserId, mode, origin, className }: {
   cosignerUserId?: string; mode?: Mode; origin?: string; className?: string;
 } = {}) {
+  const { locale, t } = useT();
   const demo = useDemoMode();
   const browserOrigin = useSyncExternalStore(subscribe, getOrigin, noOrigin);
-  const path = cosignHref(cosignMode(mode ?? demo.mode, cosignerUserId?.trim() || null), cosignerUserId);
+  const path = cosignHref(cosignMode(mode ?? demo.mode, cosignerUserId?.trim() || null), cosignerUserId, locale);
   const url = publicUrl(path, origin ?? browserOrigin);
   const absolute = url?.href;
   const modules = useMemo(() => absolute ? cosignQrModules(absolute) : null, [absolute]);
@@ -57,16 +60,16 @@ export function CosignQrLink({ cosignerUserId, mode, origin, className }: {
     <Card className={`space-y-3 ${className ?? ""}`}>
       <div className="flex items-center gap-2">
         <QrCode aria-hidden="true" className="size-5 shrink-0 text-bcc" />
-        <h2 className="type-h3">Подключить второй телефон</h2>
+        <h2 className="type-h3">{t("cosignQrLink.connect")}</h2>
       </div>
       {modules && <QrCanvas modules={modules} />}
       <a href={absolute ?? path} target="_blank" rel="noreferrer"
         className="inline-flex items-center gap-2 rounded text-sm font-semibold text-bcc hover:underline">
-        Открыть кабинет «Вторая рука» <ExternalLink aria-hidden="true" className="size-4 shrink-0" />
+        {t("cosignQrLink.open")} <ExternalLink aria-hidden="true" className="size-4 shrink-0" />
       </a>
-      {loopback && <p className="text-xs text-gold">Этот адрес работает только на текущем устройстве. Для QR откройте стенд по HTTPS-адресу, доступному телефону.</p>}
-      {url && !loopback && url.protocol === "http:" && <p className="text-xs text-gold">По HTTP на LAN-IP браузер телефона блокирует Passkey и WebCrypto. Для подписи нужен HTTPS.</p>}
-      <p className="text-xs text-ink-secondary">На телефоне можно выбрать Software Key по HTTPS. Для Passkey домен должен соответствовать настроенному RP ID.</p>
+      {loopback && <p className="text-xs text-gold">{t("cosignQrLink.loopback")}</p>}
+      {url && !loopback && url.protocol === "http:" && <p className="text-xs text-gold">{t("cosignQrLink.http")}</p>}
+      <p className="text-xs text-ink-secondary">{t("cosignQrLink.https")}</p>
     </Card>
   );
 }

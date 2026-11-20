@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/components/shell/LocaleProvider";
+import type { MessageKey } from "@/lib/i18n";
 import Link from "next/link";
 import { X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
@@ -12,14 +14,14 @@ const accents = {
   info: "border-l-quantum",
 };
 
-export interface ToastInput {
-  title: string;
-  description?: string;
+type ToastCopy = { title: string; description?: string } | { titleKey: MessageKey; descriptionKey?: MessageKey };
+
+export type ToastInput = ToastCopy & {
   tone?: keyof typeof accents;
   durationMs?: number;
   kind?: "COSIGN_REQUESTED";
   action?: { label: string } & ({ href: string } | { onClick: () => void });
-}
+};
 
 type ToastMessage = ToastInput & { id: number };
 type ToastContextValue = { toast: (input: ToastInput) => number; dismiss: (id: number) => void };
@@ -27,11 +29,14 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 let nextId = 0;
 
 function ToastItem({ item, dismiss }: { item: ToastMessage; dismiss: (id: number) => void }) {
+  const { t } = useT();
   const reduce = useReducedMotion();
-  const { id, title, description, tone, kind, durationMs, action } = item;
+  const { id, tone, kind, durationMs, action } = item;
+  const title = "titleKey" in item ? t(item.titleKey) : item.title;
+  const description = "titleKey" in item ? item.descriptionKey && t(item.descriptionKey) : item.description;
   const cosign = kind === "COSIGN_REQUESTED";
   const resolvedTone = tone ?? (cosign ? "warning" : "info");
-  const link = action ?? (cosign ? { href: "/cosign", label: "Открыть экран Второй руки →" } : undefined);
+  const link = action ?? (cosign ? { href: "/cosign", label: t("toast.cosign") } : undefined);
   useEffect(() => {
     const timer = setTimeout(() => dismiss(id), durationMs ?? (cosign ? 8_000 : 4_500));
     return () => clearTimeout(timer);
@@ -51,7 +56,7 @@ function ToastItem({ item, dismiss }: { item: ToastMessage; dismiss: (id: number
             onClick={() => { dismiss(id); link.onClick(); }}>{link.label}</button>
         ))}
       </div>
-      <button type="button" aria-label="Закрыть уведомление" onClick={() => dismiss(id)}
+      <button type="button" aria-label={t("toast.dismiss")} onClick={() => dismiss(id)}
         className="self-start rounded p-1 text-ink-secondary hover:bg-surface-hover">
         <X className="size-4" aria-hidden="true" />
       </button>

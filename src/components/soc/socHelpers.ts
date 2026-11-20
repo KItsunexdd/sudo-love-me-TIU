@@ -1,3 +1,5 @@
+import { diagnosticText, failureText } from "@/lib/i18n/server-text";
+import { regions, russian, type Locale, type Translate } from "@/lib/i18n";
 import type { BadgeTone } from "@/components/ui/Badge";
 import type { SecurityEvent } from "@/lib/db/types";
 
@@ -29,19 +31,19 @@ export interface EventMeta {
   isAttack: boolean;
 }
 
-const CANONICAL_ATTACK_META: readonly {
+const getAttackCategories = (t: Translate): readonly {
   key: SocAttackCategory;
   label: string;
   shortLabel: string;
   color: string;
-}[] = [
-  { key: "MITM_AMOUNT", label: "MITM: подмена суммы", shortLabel: "MITM сумма", color: "#EF4444" },
-  { key: "MITM_RECIPIENT", label: "MITM: подмена IBAN", shortLabel: "MITM IBAN", color: "#F97316" },
-  { key: "REPLAY", label: "Replay-атака", shortLabel: "Replay", color: "#F59E0B" },
-  { key: "PHISHING_ORIGIN", label: "Фишинг / чужой Origin", shortLabel: "Phishing / Origin", color: "#FB7185" },
-  { key: "SOCIAL_ENGINEERING", label: "Социнженерия (2-of-2)", shortLabel: "Социнженерия", color: "#FBBF24" },
-  { key: "PQ_SIGNATURE", label: "Квант / ML-DSA-65", shortLabel: "Квант (ML-DSA)", color: "#38BDF8" },
-];
+}[] => ([
+  { key: "MITM_AMOUNT", label: t("socHelpers.amount"), shortLabel: t("common.mitmAmount"), color: "#EF4444" },
+  { key: "MITM_RECIPIENT", label: t("socHelpers.iban"), shortLabel: "MITM IBAN", color: "#F97316" },
+  { key: "REPLAY", label: t("socHelpers.replay"), shortLabel: "Replay", color: "#F59E0B" },
+  { key: "PHISHING_ORIGIN", label: t("socHelpers.phishing"), shortLabel: "Phishing / Origin", color: "#FB7185" },
+  { key: "SOCIAL_ENGINEERING", label: t("socHelpers.social"), shortLabel: t("common.social"), color: "#FBBF24" },
+  { key: "PQ_SIGNATURE", label: t("socHelpers.quantum"), shortLabel: t("socHelpers.pq"), color: "#38BDF8" },
+]);
 
 /**
  * Классификация событий согласована с серверной функцией attackType() в src/lib/soc/service.ts.
@@ -69,45 +71,46 @@ export function classifyEventCategory(event: SecurityEvent): SocEventCategory {
   }
 }
 
-export function getEventMeta(event: SecurityEvent): EventMeta {
+export function getEventMeta(event: SecurityEvent, t: Translate = russian): EventMeta {
   const category = classifyEventCategory(event);
   switch (event.eventType) {
     case "ATTACK_MITM_BLOCKED":
       if (category === "MITM_AMOUNT") {
-        return { category, label: "MITM сумма", tone: "danger", isAttack: true };
+        return { category, label: t("common.mitmAmount"), tone: "danger", isAttack: true };
       }
       if (category === "MITM_RECIPIENT") {
         return { category, label: "MITM IBAN", tone: "danger", isAttack: true };
       }
-      return { category, label: "MITM подмена", tone: "danger", isAttack: true };
+      return { category, label: t("socHelpers.mitm"), tone: "danger", isAttack: true };
     case "ATTACK_REPLAY_BLOCKED":
       return { category, label: "Replay", tone: "warning", isAttack: true };
     case "ATTACK_PHISHING_BLOCKED":
       return { category, label: "Phishing / Origin", tone: "danger", isAttack: true };
     case "SOCENG_STOPPED_BY_COSIGNER":
-      return { category, label: "Социнженерия", tone: "danger", isAttack: true };
+      return { category, label: t("common.social"), tone: "danger", isAttack: true };
     case "PQ_SIGNATURE_REJECTED":
-      return { category, label: "Квант (ML-DSA)", tone: "info", isAttack: true };
+      return { category, label: t("socHelpers.pq"), tone: "info", isAttack: true };
     case "WEBAUTHN_REJECTED":
-      return { category, label: "Отказ WebAuthn", tone: "danger", isAttack: true };
+      return { category, label: t("socHelpers.webauthn"), tone: "danger", isAttack: true };
     case "TX_EXECUTED":
-      return { category, label: "Подписано без SMS", tone: "success", isAttack: false };
+      return { category, label: t("common.signed"), tone: "success", isAttack: false };
     case "COSIGN_TRIGGERED":
-      return { category, label: "Запрос Второй руки", tone: "warning", isAttack: false };
+      return { category, label: t("socHelpers.cosign"), tone: "warning", isAttack: false };
     case "COSIGN_APPROVED":
-      return { category, label: "Вторая подпись OK", tone: "success", isAttack: false };
+      return { category, label: t("socHelpers.approved"), tone: "success", isAttack: false };
     case "DEVICE_REGISTERED":
-      return { category, label: "Новое устройство", tone: "info", isAttack: false };
+      return { category, label: t("socHelpers.device"), tone: "info", isAttack: false };
     case "TX_EXPIRED":
-      return { category, label: "Истёк TTL", tone: "neutral", isAttack: false };
+      return { category, label: t("socHelpers.expired"), tone: "neutral", isAttack: false };
     case "TX_POLICY_REJECTED":
-      return { category, label: "Отказ политики", tone: "warning", isAttack: false };
+      return { category, label: t("socHelpers.policy"), tone: "warning", isAttack: false };
   }
 }
 
-export function buildAttackBreakdown(blockedByType: Record<string, number>): AttackBreakdownItem[] {
+export function buildAttackBreakdown(blockedByType: Record<string, number>, t: Translate = russian): AttackBreakdownItem[] {
+  const categories = getAttackCategories(t);
   const otherCount = (blockedByType.MITM_PAYLOAD ?? 0) + (blockedByType.WEBAUTHN ?? 0);
-  const raw = CANONICAL_ATTACK_META.map(meta => ({
+  const raw = categories.map(meta => ({
     ...meta,
     count: blockedByType[meta.key] ?? 0,
   }));
@@ -115,8 +118,8 @@ export function buildAttackBreakdown(blockedByType: Record<string, number>): Att
   if (otherCount > 0) {
     items.push({
       key: "OTHER_ATTACK",
-      label: "Прочие крипто-отказы",
-      shortLabel: "Прочие крипто",
+      label: t("socHelpers.other"),
+      shortLabel: t("common.other"),
       color: "#A78BFA",
       count: otherCount,
     });
@@ -133,29 +136,26 @@ export function extractFailureCode(event: SecurityEvent): string | undefined {
   return typeof code === "string" && code.length > 0 ? code : undefined;
 }
 
-const timeFormatter = new Intl.DateTimeFormat("ru-RU", {
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-});
-
-const dateTimeFormatter = new Intl.DateTimeFormat("ru-RU", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-});
-
-export function formatEventTime(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "—";
-  return timeFormatter.format(date);
+export function eventSummary(event: SecurityEvent, locale: Locale) {
+  const code = extractFailureCode(event);
+  return code ? failureText(locale, code, event.summary) : diagnosticText(locale, event.summary);
 }
 
-export function formatEventDateTime(iso: string): string {
+function eventFormatters(region: string) {
+  const time: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit", second: "2-digit" };
+  return {
+    time: new Intl.DateTimeFormat(region, time),
+    dateTime: new Intl.DateTimeFormat(region, { ...time, day: "2-digit", month: "2-digit", year: "numeric" }),
+  };
+}
+const formats = { ru: eventFormatters(regions.ru), kk: eventFormatters(regions.kk) };
+
+export function formatEventTime(iso: string, locale: Locale = "ru") {
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "—";
-  return dateTimeFormatter.format(date);
+  return Number.isNaN(date.getTime()) ? "—" : formats[locale].time.format(date);
+}
+
+export function formatEventDateTime(iso: string, locale: Locale = "ru") {
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? "—" : formats[locale].dateTime.format(date);
 }

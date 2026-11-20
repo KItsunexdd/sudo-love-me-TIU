@@ -1,5 +1,7 @@
 "use client";
 
+import { russian, type Translate } from "@/lib/i18n";
+import { useT } from "@/components/shell/LocaleProvider";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { BadgeCheck, LoaderCircle, ShieldCheck, ShieldX } from "lucide-react";
 import Link from "next/link";
@@ -13,23 +15,23 @@ import { failureMessages, type Mode, type TransactionRecord } from "@/lib/db/typ
 import { formatIban, formatTenge } from "@/lib/ui/format";
 import { CosignDevicePanel, useCosignDevice } from "./CosignDevicePanel";
 import { CosignRequestCard, CosignSignatureChain } from "./CosignRequestCard";
-import { corporateRule, selectCosigner, signatureHash } from "./cosignDetails";
+import { selectCosigner, signatureHash } from "./cosignDetails";
 import { useCosignFeed } from "./useCosignFeed";
 
-const connectionLabels = {
-  connecting: ["neutral", "Подключение SSE"],
+const getConnectionLabels = (t: Translate) => ({
+  connecting: ["neutral", t("cosignFeed.connecting")],
   live: ["success", "SSE Live"],
-  polling: ["warning", "Резервный опрос"],
-  offline: ["danger", "Связь потеряна"],
-} as const satisfies Record<ConnectionStatus, readonly [string, string]>;
+  polling: ["warning", t("cosignFeed.polling")],
+  offline: ["danger", t("cosignFeed.offline")],
+} as const satisfies Record<ConnectionStatus, readonly [string, string]>);
 
-const almatyTime = new Intl.DateTimeFormat("ru-KZ", {
+const decisionTimeOptions: Intl.DateTimeFormatOptions = {
   timeZone: "Asia/Almaty", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
-});
+};
 
-function formatDecisionTime(value: string) {
+function formatDecisionTime(value: string, region: string) {
   const time = Date.parse(value);
-  return Number.isFinite(time) ? almatyTime.format(time) : value;
+  return Number.isFinite(time) ? new Intl.DateTimeFormat(region, decisionTimeOptions).format(time) : value;
 }
 
 type SuccessfulDecision = {
@@ -40,6 +42,7 @@ type SuccessfulDecision = {
 };
 
 function DecisionResult({ decision, coolingOffActive }: { decision: SuccessfulDecision; coolingOffActive: boolean }) {
+  const { t, region } = useT();
   const reduce = useReducedMotion();
   const { transaction, status } = decision;
   const blocked = status === "BLOCKED_BY_COSIGNER";
@@ -57,8 +60,8 @@ function DecisionResult({ decision, coolingOffActive }: { decision: SuccessfulDe
           </span>
           <div className="min-w-0">
             <h2 className="type-h2 break-words tabular-nums">
-              {blocked ? corporate ? "Платёж отклонён" :
-                `Спасено ${formatTenge(decision.savedAmountTenge ?? transaction.payload.amountTenge)}` : "Операция подписана 2-of-2"}
+              {blocked ? corporate ? t("cosignFeed.rejected") :
+                t("cosignFeed.saved", { value: formatTenge(decision.savedAmountTenge ?? transaction.payload.amountTenge) }) : t("cosignFeed.signed")}
             </h2>
             <p className="mt-0.5 break-words text-sm tabular-nums text-ink-secondary">
               {transaction.payload.recipientName} · <span className="font-mono">{formatTenge(transaction.payload.amountTenge)}</span>
@@ -68,9 +71,9 @@ function DecisionResult({ decision, coolingOffActive }: { decision: SuccessfulDe
         {blocked ? (
           <div className="flex flex-wrap items-center gap-2">
             {transaction.status === status && <time className="mono-data text-ink-secondary" dateTime={transaction.updatedAt}>
-              {formatDecisionTime(transaction.updatedAt)}
+              {formatDecisionTime(transaction.updatedAt, region)}
             </time>}
-            {coolingOffActive && <Badge tone="warning">Режим охлаждения активен</Badge>}
+            {coolingOffActive && <Badge tone="warning">{t("cosignFeed.cooling")}</Badge>}
           </div>
         ) : <CosignSignatureChain transaction={transaction} />}
       </Card>
@@ -79,19 +82,20 @@ function DecisionResult({ decision, coolingOffActive }: { decision: SuccessfulDe
 }
 
 function DecisionHistory({ transactions }: { transactions: TransactionRecord[] }) {
+  const { t, region } = useT();
   return (
     <section className="space-y-2">
-      <h2 className="type-h3 text-ink-secondary">История решений</h2>
-      {transactions.length === 0 ? <p className="text-sm text-ink-muted">Решений пока нет.</p> : (
+      <h2 className="type-h3 text-ink-secondary">{t("cosignFeed.history")}</h2>
+      {transactions.length === 0 ? <p className="text-sm text-ink-muted">{t("cosignFeed.emptyHistory")}</p> : (
         <ul className="divide-y divide-border-subtle rounded-2xl border border-border-default bg-surface px-3.5">
           {transactions.map(tx => (
             <li key={tx.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
               <div className="min-w-0">
                 <p className="break-words text-sm font-semibold text-ink-primary">{tx.payload.recipientName}</p>
-                <p className="mono-data text-xs text-ink-secondary">{formatTenge(tx.payload.amountTenge)} · <time dateTime={tx.updatedAt}>{formatDecisionTime(tx.updatedAt)}</time></p>
+                <p className="mono-data text-xs text-ink-secondary">{formatTenge(tx.payload.amountTenge)} · <time dateTime={tx.updatedAt}>{formatDecisionTime(tx.updatedAt, region)}</time></p>
               </div>
               {tx.status === "BLOCKED_BY_COSIGNER"
-                ? <Badge tone="danger">{tx.payload.mode === "B2B" ? "Платёж отклонён" : "Перевод остановлен"}</Badge>
+                ? <Badge tone="danger">{tx.payload.mode === "B2B" ? t("cosignFeed.rejected") : t("cosignFeed.stopped")}</Badge>
                 : <Badge status={tx.status} />}
             </li>
           ))}
@@ -102,8 +106,9 @@ function DecisionHistory({ transactions }: { transactions: TransactionRecord[] }
 }
 
 function FeedSkeleton() {
+  const { t } = useT();
   return (
-    <Card aria-busy="true" aria-label="Загрузка запросов Второй руки" className="space-y-3">
+    <Card aria-busy="true" aria-label={t("cosignFeed.loading")} className="space-y-3">
       <Skeleton className="h-12 w-full rounded-xl" />
       <Skeleton className="h-20 w-full rounded-xl" />
       <Skeleton className="h-11 w-full rounded-xl" />
@@ -115,6 +120,8 @@ function FeedSkeleton() {
 export function CosignFeed({ userId, mode, compact = false, hideConnectionBadge = false, profileSwitch }: {
   userId: string; mode: Mode; compact?: boolean; hideConnectionBadge?: boolean; profileSwitch?: ReactNode;
 }) {
+  const { locale, t } = useT();
+  const connectionLabels = getConnectionLabels(t);
   const feed = useCosignFeed(userId, mode);
   const { users } = useDemoState(userId);
   const deviceState = useCosignDevice(userId, feed.syncVersion, feed.resyncVersion, feed.resetId);
@@ -150,7 +157,7 @@ export function CosignFeed({ userId, mode, compact = false, hideConnectionBadge 
             prepared.data.primarySignatureHashHex !== signatureHash(transaction.primarySignature)) {
           throw new SignerError({
             status: "ERROR", failureCode: "ERR_WYSIWYS_TAMPERED",
-            message: "Реквизиты или первая подпись изменились после открытия запроса.",
+            message: russian("cosignFeed.changed"),
           });
         }
         const allowed = deviceState.devices.find(item => prepared.data.webAuthnOptions.allowCredentials?.some(key => key.id === item.credentialId));
@@ -158,7 +165,7 @@ export function CosignFeed({ userId, mode, compact = false, hideConnectionBadge 
           deviceState.retry();
           throw new SignerError({
             status: "ERROR", failureCode: "ERR_DEVICE_NOT_REGISTERED",
-            message: "Привяжите ключ доверенного лица на этом устройстве.",
+            message: russian("cosignFeed.bind"),
           });
         }
         const signature = await signCosign(prepared.data, allowed.id);
@@ -202,9 +209,9 @@ export function CosignFeed({ userId, mode, compact = false, hideConnectionBadge 
     : userId);
   const initials = profileName.split(/\s+/).slice(0, 2).map(part => part[0]).join("");
   const devicePrompt = deviceState.error
-    ? <ErrorCard error={deviceState.error} action={<Button size="sm" variant="secondary" onClick={deviceState.retry}>Проверить устройство</Button>} />
+    ? <ErrorCard error={deviceState.error} action={<Button size="sm" variant="secondary" onClick={deviceState.retry}>{t("cosignFeed.checkDevice")}</Button>} />
     : deviceState.loading
-      ? <p role="status" className="flex items-center gap-2 px-1 text-sm text-ink-secondary"><LoaderCircle aria-hidden="true" className="size-4 motion-safe:animate-spin" />Проверяем ключи</p>
+      ? <p role="status" className="flex items-center gap-2 px-1 text-sm text-ink-secondary"><LoaderCircle aria-hidden="true" className="size-4 motion-safe:animate-spin" />{t("cosignFeed.keys")}</p>
       : device ? null : <CosignDevicePanel userId={userId} />;
 
   function senderName(transaction: TransactionRecord) {
@@ -227,7 +234,7 @@ export function CosignFeed({ userId, mode, compact = false, hideConnectionBadge 
                 <h1 className="truncate text-base font-bold leading-tight sm:text-lg">{profileName}</h1>
               )}
               <p className="truncate text-xs text-ink-secondary">
-                Вторая рука · {corporate ? "Директор" : "Доверенное лицо"}
+                {t("cosignFeed.role")} {corporate ? t("common.director") : t("common.trusted")}
               </p>
             </div>
           </div>
@@ -255,7 +262,7 @@ export function CosignFeed({ userId, mode, compact = false, hideConnectionBadge 
       {feed.error && (
         <ErrorCard
           error={feed.error}
-          action={<Button variant="secondary" size="sm" onClick={feed.refresh}>Обновить запросы</Button>}
+          action={<Button variant="secondary" size="sm" onClick={feed.refresh}>{t("cosignFeed.refresh")}</Button>}
         />
       )}
       {recentActionError && <ErrorCard error={recentActionError} />}
@@ -266,7 +273,7 @@ export function CosignFeed({ userId, mode, compact = false, hideConnectionBadge 
         <>
           {showOutcome && <DecisionResult key={outcome.transaction.id} decision={outcome} coolingOffActive={coolingOffActive} />}
           {pending.length > 0 && clock ? (
-            <section className="space-y-2.5" aria-label="Входящие запросы">
+            <section className="space-y-2.5" aria-label={t("cosignFeed.incoming")}>
               <AnimatePresence initial={false}>
                 {pending.map((tx, index) => (
                   <CosignRequestCard
@@ -299,11 +306,11 @@ export function CosignFeed({ userId, mode, compact = false, hideConnectionBadge 
                 <EmptyState
                   icon={ShieldCheck}
                   className={compact ? "p-4" : "p-5"}
-                  title={corporate ? "Нет платежей на подпись" : "Всё спокойно"}
-                  description={corporate ? corporateRule : "Здесь появятся операции, которым нужна ваша подпись 2-of-2."}
+                  title={corporate ? t("cosignFeed.noPayments") : t("common.allClear")}
+                  description={corporate ? t("cosignDetails.corporate") : t("cosignFeed.confirmHint")}
                   action={compact ? undefined : (
-                    <Link className="rounded-lg text-sm font-semibold text-bcc hover:underline" href={`/?mode=${mode}`}>
-                      Открыть демо-стенд
+                    <Link className="rounded-lg text-sm font-semibold text-bcc hover:underline" href={`/?mode=${mode}&lang=${locale}`}>
+                      {t("cosignFeed.openDemo")}
                     </Link>
                   )}
                 />

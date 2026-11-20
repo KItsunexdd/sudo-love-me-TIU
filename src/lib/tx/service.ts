@@ -149,7 +149,9 @@ function assessRequest(input: z.infer<typeof riskPreviewSchema>, db: Database, n
   requireTx(sender.role === (b2b ? "ACCOUNTANT_B2B" : "CLIENT_B2C") &&
     b2b === (input.operationType === "B2B_INVOICE"), "ERR_INVALID_INPUT");
   checkProductLimits(sender, input);
-  return { sender, risk: assessRisk(input, sender, db.blacklist, now) };
+  const risk = assessRisk(input, sender, db.blacklist, now);
+  if (requiresBankCoSign(input)) risk.codes.push("BANK_COSIGN");
+  return { sender, risk };
 }
 
 export class TransactionService {
@@ -199,7 +201,8 @@ export class TransactionService {
       const status = "CHALLENGE_ISSUED" as const;
       const tx: TransactionRecord = {
         id: txId, status, payload, canonicalJson, txHashHex, nonceUsed: false, cosignNonceUsed: false,
-        riskScore: risk.score, riskLevel: risk.level, riskReasons: risk.reasons, requiresCoSign: risk.requiresCoSign,
+        riskScore: risk.score, riskLevel: risk.level, riskReasons: risk.reasons, riskCodes: risk.codes,
+        requiresCoSign: risk.requiresCoSign,
         cosignerUserId, verificationTrace: [], createdAt: payload.createdAt, updatedAt: payload.createdAt,
       };
       db.transactions.push(tx);
@@ -233,7 +236,10 @@ export class TransactionService {
           tx.requiresCoSign = true;
           if (bankCoSign) {
             tx.riskLevel = "HIGH";
-            if (!tx.riskReasons.includes(bankCoSignReason)) tx.riskReasons.push(bankCoSignReason);
+            if (!tx.riskReasons.includes(bankCoSignReason)) {
+              tx.riskReasons.push(bankCoSignReason);
+              tx.riskCodes?.push("BANK_COSIGN");
+            }
           }
           tx.status = "PENDING_COSIGN";
           tx.cosignExpiresAt = new Date(Date.parse(signature.signedAt) + COSIGN_TTL).toISOString();

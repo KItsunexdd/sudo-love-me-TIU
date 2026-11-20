@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/components/shell/LocaleProvider";
 import { motion, useReducedMotion } from "framer-motion";
 import { Atom, CheckCircle2, Fingerprint, LockKeyhole, LockKeyholeOpen } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -26,6 +27,7 @@ function LockTile({
   timing?: number;
   quantum?: boolean;
 }) {
+  const { t } = useT();
   const reduce = useReducedMotion();
   const Icon = state === "signed" ? LockKeyhole : quantum ? Atom : LockKeyholeOpen;
   const toneClass = quantum
@@ -42,12 +44,12 @@ function LockTile({
 
   const statusText =
     state === "signed" && timing !== undefined
-      ? `Подписано · ${formatMs(timing)}`
+      ? t("biometricSignModal.signed", { value: formatMs(timing) })
       : state === "signing"
         ? quantum
-          ? "Генерация ML-DSA-65…"
-          : "Подтвердите устройством…"
-        : "Готов к подписи";
+          ? t("biometricSignModal.generating")
+          : t("biometricSignModal.confirmDevice")
+        : t("biometricSignModal.ready");
 
   return (
     <div className={`relative overflow-hidden rounded-xl border p-3.5 transition-colors duration-200 ${toneClass}`}>
@@ -81,6 +83,7 @@ export function BiometricSignModal({ prepared, device, onClose, onComplete, onFa
   prepared: PrepareResponse; device: LocalDevice; onClose: () => void;
   onComplete: (result: ApiResult<ExecuteResponse>) => void; onFallback: () => void; onRenew: () => void;
 }) {
+  const { t } = useT();
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState<SignStage>("review");
   const [error, setError] = useState<ApiError>();
@@ -154,10 +157,10 @@ export function BiometricSignModal({ prepared, device, onClose, onComplete, onFa
   }
 
   const fields = [
-    { label: "Операция", value: { ONLINE_LOAN: "Онлайн-кредит", DEPOSIT_CLOSE: "Закрытие депозита", P2P_TRANSFER: "Перевод", B2B_INVOICE: "Оплата счёта" }[payload.operationType], mono: false },
-    { label: "Получатель", value: payload.recipientName, mono: false },
-    { label: "Счёт (IBAN)", value: formatIban(payload.recipientAccount), mono: true },
-    { label: "Назначение", value: payload.purpose || "Без назначения", mono: false },
+    { label: t("biometricSignModal.operation"), value: { ONLINE_LOAN: t("common.loan"), DEPOSIT_CLOSE: t("biometricSignModal.closeDeposit"), P2P_TRANSFER: t("common.transfer"), B2B_INVOICE: t("common.invoice") }[payload.operationType], mono: false },
+    { label: t("common.recipient"), value: payload.recipientName, mono: false },
+    { label: t("biometricSignModal.account"), value: formatIban(payload.recipientAccount), mono: true },
+    { label: t("common.purpose"), value: payload.purpose || t("biometricSignModal.noPurpose"), mono: false },
   ];
 
   const lock1State = stage === "mldsa" || stage === "sending" ? "signed" : stage === "webauthn" ? "signing" : "idle";
@@ -169,22 +172,22 @@ export function BiometricSignModal({ prepared, device, onClose, onComplete, onFa
       onClose={onClose}
       dismissible={!busy}
       wide
-      title="Подтверждение операции (WYSIWYS)"
-      description="Вы подписываете ровно эти реквизиты — подмена в пути математически невозможна."
+      title={t("biometricSignModal.confirm")}
+      description={t("biometricSignModal.confirmHint")}
       footer={
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span className="mono-data text-ink-secondary">
-            {remaining ? `Осталось ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}` : "Время истекло"}
+            {remaining ? t("biometricSignModal.remaining", { value: Math.floor(remaining / 60), value2: String(remaining % 60).padStart(2, "0") }) : t("common.expired")}
           </span>
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="ghost" onClick={onClose} disabled={busy}>Отмена</Button>
-            {!remaining ? <Button onClick={onRenew} disabled={busy}>Подготовить новый вызов</Button> : <Button
+            <Button variant="ghost" onClick={onClose} disabled={busy}>{t("common.cancel")}</Button>
+            {!remaining ? <Button onClick={onRenew} disabled={busy}>{t("biometricSignModal.renew")}</Button> : <Button
               disabled={risk.requiresAcknowledgement && !ack}
               loading={busy}
               icon={<Fingerprint size={18} />}
               onClick={() => void sign()}
             >
-              {software ? "Подтвердить Software Key + ML-DSA" : "Подтвердить Passkey + ML-DSA"}
+              {software ? t("biometricSignModal.confirmSoftware") : t("biometricSignModal.confirmPasskey")}
             </Button>}
           </div>
         </div>
@@ -203,15 +206,15 @@ export function BiometricSignModal({ prepared, device, onClose, onComplete, onFa
             ))}
           </dl>
           <div className="border-t border-border-default pt-3">
-            <p className="type-label text-ink-muted">Сумма к списанию</p>
+            <p className="type-label text-ink-muted">{t("biometricSignModal.debit")}</p>
             <p className="font-mono text-[2rem] font-extrabold leading-tight tracking-tight tabular-nums text-ink-primary">
               {formatTenge(payload.amountTenge)}
             </p>
           </div>
-          <HashChip value={txHashHex} label="Контрольный SHA-256" />
+          <HashChip value={txHashHex} label={t("biometricSignModal.checksum")} />
           <details>
             <summary className="cursor-pointer rounded text-sm font-medium text-ink-secondary hover:text-ink-primary">
-              Все подписываемые поля (Canonical JSON)
+              {t("biometricSignModal.fields")}
             </summary>
             <JsonDiffViewer json={prepared.canonicalJson} className="mt-2" />
           </details>
@@ -219,15 +222,15 @@ export function BiometricSignModal({ prepared, device, onClose, onComplete, onFa
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <LockTile
-            label={software ? "Замок 1 · WebCrypto ECDSA" : "Замок 1 · Passkey"}
-            subtitle={`Привязан к: ${payload.rpId}`}
+            label={software ? t("biometricSignModal.lockSoftware") : t("biometricSignModal.lockPasskey")}
+            subtitle={t("biometricSignModal.bound", { rpId: payload.rpId })}
             state={lock1State}
             timing={timings?.webauthnMs}
           />
           <LockTile
             quantum
-            label="Замок 2 · ML-DSA-65"
-            subtitle="Post-Quantum FIPS 204 · 3 309 Б"
+            label={t("biometricSignModal.lockPq")}
+            subtitle={t("biometricSignModal.pqSize")}
             state={lock2State}
             timing={timings?.pqSignMs}
           />
@@ -235,17 +238,17 @@ export function BiometricSignModal({ prepared, device, onClose, onComplete, onFa
 
         {mitmIntercepted ? (
           <p role="alert" className="rounded-xl border border-danger/55 bg-danger/15 px-3.5 py-2 text-sm font-semibold text-danger-text">
-            ⚡ MITM перехватил и изменил пакет в пути! Отправляем на 7-шаговую верификацию сервера…
+            {t("biometricSignModal.intercepted")}
           </p>
         ) : stage === "sending" && (
           <p role="status" className="text-sm font-medium text-bcc">
-            Оба криптозамка сомкнуты — отправлено на 7-шаговую верификацию сервера…
+            {t("biometricSignModal.submitted")}
           </p>
         )}
 
         {risk.requiresAcknowledgement && (
           <Card variant="warning">
-            <h3 className="mb-2 type-h3">Экран отрезвления</h3>
+            <h3 className="mb-2 type-h3">{t("biometricSignModal.warning")}</h3>
             <label className="flex cursor-pointer items-start gap-3 text-sm">
               <input
                 type="checkbox"
@@ -254,7 +257,7 @@ export function BiometricSignModal({ prepared, device, onClose, onComplete, onFa
                 className="mt-1 size-4 shrink-0 accent-gold"
                 onChange={event => setAck(event.target.checked)}
               />
-              <span>Я подтверждаю, что совершаю операцию добровольно и мне сейчас не звонят из полиции, Нацбанка, КНБ или службы безопасности.</span>
+              <span>{t("biometricSignModal.ack")}</span>
             </label>
           </Card>
         )}
@@ -262,22 +265,22 @@ export function BiometricSignModal({ prepared, device, onClose, onComplete, onFa
         {armed && !mitmIntercepted && (
           <Card variant="danger" role="alert">
             <p className="text-sm font-semibold text-danger-text">
-              ⚡ Перехватчик взведён: после вашей подписи пакет будет изменён в пути (
-              {armed === "MITM_AMOUNT" ? `сумма → ${formatTenge(MITM_AMOUNT_TENGE)}` : "получатель → дроппер"}).
+              {t("biometricSignModal.armed")}
+              {armed === "MITM_AMOUNT" ? t("biometricSignModal.amount", { value: formatTenge(MITM_AMOUNT_TENGE) }) : t("biometricSignModal.dropper")}).
             </p>
           </Card>
         )}
 
         {risk.requiresCoSign && (
           <p className="text-sm font-medium text-amber-300">
-            После вашей подписи запрос мгновенно получит «Вторая рука» для подтверждения 2-of-2.
+            {t("biometricSignModal.secondSignature")}
           </p>
         )}
 
         {error && (
           <ErrorCard
             error={error}
-            action={!software && <Button size="sm" variant="secondary" onClick={onFallback}>Использовать Software Key</Button>}
+            action={!software && <Button size="sm" variant="secondary" onClick={onFallback}>{t("biometricSignModal.useSoftware")}</Button>}
           />
         )}
       </div>

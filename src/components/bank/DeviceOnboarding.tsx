@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/components/shell/LocaleProvider";
 import { useRef, useState } from "react";
 import { Fingerprint } from "lucide-react";
 import { Button, ErrorCard, Modal, SegmentedControl } from "@/components/ui";
@@ -7,6 +8,7 @@ import type { ApiError } from "@/lib/client/api";
 import { registerDevice, toClientError } from "@/lib/client/signer";
 
 export function DeviceOnboarding({ userId, software, onClose }: { userId: string; software: boolean; onClose: () => void }) {
+  const { t } = useT();
   const [choice, setChoice] = useState(software ? "software" : "passkey");
   const [busy, setBusy] = useState(false);
   const submitting = useRef(false);
@@ -26,14 +28,14 @@ export function DeviceOnboarding({ userId, software, onClose }: { userId: string
       setBusy(false);
     }
   }
-  return <Modal open onClose={onClose} dismissible={!busy} title="Привязать устройство" description="Выберите ключ для подтверждения операций."
-    footer={<Button loading={busy} icon={<Fingerprint size={18} />} onClick={() => void register()}>Привязать устройство</Button>}>
+  return <Modal open onClose={onClose} dismissible={!busy} title={t("common.enroll")} description={t("deviceOnboarding.choose")}
+    footer={<Button loading={busy} icon={<Fingerprint size={18} />} onClick={() => void register()}>{t("common.enroll")}</Button>}>
     <div className="space-y-3">
-      <SegmentedControl label="Ключ устройства" value={choice} onChange={setChoice} options={[
+      <SegmentedControl label={t("deviceOnboarding.deviceKey")} value={choice} onChange={setChoice} options={[
         { value: "passkey", label: "Passkey", disabled: busy }, { value: "software", label: "Software Key", disabled: busy },
       ]} />
-      <p className="text-sm text-ink-secondary">{choice === "software" ? "Браузер создаст ключ ECDSA P-256 для устройств без сканера." :
-        "Подтвердите привязку в системном окне Passkey."} Ключ ML-DSA-65 будет создан на этом устройстве.</p>
+      <p className="text-sm text-ink-secondary">{choice === "software" ? t("deviceOnboarding.software") :
+        t("deviceOnboarding.passkey")} {t("deviceOnboarding.pq")}</p>
       {error && <ErrorCard error={error} />}
     </div>
   </Modal>;

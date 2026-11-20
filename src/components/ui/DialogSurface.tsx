@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/components/shell/LocaleProvider";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { X } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, type ReactNode } from "react";
@@ -19,6 +20,7 @@ export interface DialogProps {
 export function DialogSurface({
   open, onClose, title, description, footer, children, dismissible = true, className = "", placement, wide,
 }: DialogProps & { placement: "center" | "right"; wide?: boolean }) {
+  const { t } = useT();
   const ref = useRef<HTMLDialogElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const id = useId();
@@ -112,7 +114,7 @@ export function DialogSurface({
               {dismissible && (
                 <button
                   type="button"
-                  aria-label="Закрыть"
+                  aria-label={t("common.close")}
                   onClick={onClose}
                   className="shrink-0 rounded-xl border border-transparent p-2 text-ink-secondary transition-colors hover:border-border-strong hover:bg-surface-hover hover:text-ink-primary"
                 >

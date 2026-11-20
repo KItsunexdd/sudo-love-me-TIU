@@ -1,12 +1,13 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
+import { headers } from "next/headers";
 import type { ReactNode } from "react";
 import { AppProviders } from "@/components/shell/AppProviders";
 import { Topbar } from "@/components/shell/Topbar";
 import "./globals.css";
 
-const inter = Inter({ weight: "variable", subsets: ["latin", "cyrillic"], display: "swap", variable: "--font-inter" });
-const jetBrainsMono = JetBrains_Mono({ weight: "variable", subsets: ["latin", "cyrillic"], display: "swap", variable: "--font-jetbrains-mono" });
+const inter = Inter({ weight: "variable", subsets: ["latin", "cyrillic", "cyrillic-ext"], display: "swap", variable: "--font-inter" });
+const jetBrainsMono = JetBrains_Mono({ weight: "variable", subsets: ["latin", "cyrillic", "cyrillic-ext"], display: "swap", variable: "--font-jetbrains-mono" });
 
 // Render HTML per request so Next can attach the matching CSP nonce.
 export const dynamic = "force-dynamic";
@@ -51,11 +52,12 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const locale = (await headers()).get("x-safesign-lang") === "kk" ? "kk" : "ru";
   return (
-    <html lang="ru" className={`${inter.variable} ${jetBrainsMono.variable}`}>
+    <html lang={locale} className={`${inter.variable} ${jetBrainsMono.variable}`}>
       <body>
-        <AppProviders>
+        <AppProviders initialLocale={locale}>
           <Topbar />
           {children}
         </AppProviders>

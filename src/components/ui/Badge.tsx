@@ -1,3 +1,7 @@
+"use client";
+
+import type { Translate } from "@/lib/i18n";
+import { useT } from "@/components/shell/LocaleProvider";
 import type { ReactNode } from "react";
 import { Clock, Hand, KeyRound, ShieldAlert, ShieldCheck, Users, type LucideIcon } from "lucide-react";
 import type { DeviceKind, RiskLevel, SecurityEvent, TxStatus } from "@/lib/db/types";
@@ -14,26 +18,28 @@ export type BadgeTone = keyof typeof tones;
 type BadgeStatus = TxStatus | RiskLevel | DeviceKind | SecurityEvent["severity"];
 interface Label { text: string; tone: BadgeTone; icon?: LucideIcon; dot?: "static" | "pulse" }
 
-const labels: Record<BadgeStatus, Label> = {
-  CHALLENGE_ISSUED: { text: "Ожидает подписи", tone: "info", icon: KeyRound },
-  PENDING_COSIGN: { text: "Ждёт Вторую руку", tone: "warning", icon: Users, dot: "pulse" },
-  EXECUTED: { text: "Исполнено", tone: "success", icon: ShieldCheck },
-  REJECTED_CRYPTO: { text: "Атака отражена", tone: "danger", icon: ShieldAlert },
-  BLOCKED_BY_COSIGNER: { text: "Остановлено (Фрод)", tone: "danger", icon: Hand },
-  EXPIRED: { text: "Истёк срок (TTL)", tone: "neutral", icon: Clock },
-  LOW: { text: "Низкий риск", tone: "success" },
-  MEDIUM: { text: "Повышенный риск", tone: "warning" },
-  HIGH: { text: "Критический • Co-Sign", tone: "danger" },
+const getLabels = (t: Translate): Record<BadgeStatus, Label> => ({
+  CHALLENGE_ISSUED: { text: t("common.unsigned"), tone: "info", icon: KeyRound },
+  PENDING_COSIGN: { text: t("badge.pending"), tone: "warning", icon: Users, dot: "pulse" },
+  EXECUTED: { text: t("badge.executed"), tone: "success", icon: ShieldCheck },
+  REJECTED_CRYPTO: { text: t("common.repelled"), tone: "danger", icon: ShieldAlert },
+  BLOCKED_BY_COSIGNER: { text: t("badge.stopped"), tone: "danger", icon: Hand },
+  EXPIRED: { text: t("badge.expired"), tone: "neutral", icon: Clock },
+  LOW: { text: t("badge.low"), tone: "success" },
+  MEDIUM: { text: t("badge.medium"), tone: "warning" },
+  HIGH: { text: t("badge.high"), tone: "danger" },
   PLATFORM_PASSKEY: { text: "Passkey + ML-DSA-65", tone: "success", dot: "static" },
   SOFTWARE_FALLBACK: { text: "WebCrypto ECDSA + ML-DSA (Fallback)", tone: "warning", dot: "static" },
-  INFO: { text: "ИНФО", tone: "info" },
-  WARNING: { text: "РИСК", tone: "warning" },
-  CRITICAL: { text: "АТАКА", tone: "danger" },
-};
+  INFO: { text: t("common.info"), tone: "info" },
+  WARNING: { text: t("common.riskBadge"), tone: "warning" },
+  CRITICAL: { text: t("common.attack"), tone: "danger" },
+});
 
 export function Badge({ status, tone, children, className = "" }: {
   status?: BadgeStatus; tone?: BadgeTone; children?: ReactNode; className?: string;
 }) {
+  const { t } = useT();
+  const labels = getLabels(t);
   const label = status && labels[status];
   const Icon = label ? label.icon : undefined;
   const dot = label ? label.dot : undefined;

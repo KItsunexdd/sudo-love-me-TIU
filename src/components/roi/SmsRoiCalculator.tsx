@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/components/shell/LocaleProvider";
 import { useMemo, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import {
@@ -21,7 +22,7 @@ import {
   formatCompactCount,
   formatCompactTenge,
   ROI_DEFAULTS,
-  ROI_PRESETS,
+  getRoiPresets,
   ROI_RANGES,
   type RoiInputs,
   type RoiPresetId,
@@ -32,10 +33,12 @@ import { RoiCumulativeChart } from "./RoiCumulativeChart";
 import { RoiSliderField } from "./RoiSliderField";
 
 export function SmsRoiCalculator() {
+  const { locale, t } = useT();
+  const presets = useMemo(() => getRoiPresets(t), [t]);
   const [inputs, setInputs] = useState<RoiInputs>(ROI_DEFAULTS);
   const reduce = useReducedMotion();
 
-  const result = useMemo(() => calcRoi(inputs), [inputs]);
+  const result = useMemo(() => calcRoi(inputs, t), [inputs, t]);
   const activePreset = useMemo(() => detectPreset(result.inputs), [result.inputs]);
 
   function updateField<K extends keyof RoiInputs>(key: K, value: RoiInputs[K]) {
@@ -43,7 +46,7 @@ export function SmsRoiCalculator() {
   }
 
   function applyPreset(presetId: RoiPresetId) {
-    const found = ROI_PRESETS.find(preset => preset.id === presetId);
+    const found = presets.find(preset => preset.id === presetId);
     if (found) setInputs(found.inputs);
   }
 
@@ -61,21 +64,21 @@ export function SmsRoiCalculator() {
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-bcc/40 bg-bcc/[.12] px-3 py-1 text-xs font-semibold text-emerald-300">
               <Calculator aria-hidden="true" className="size-3.5" />
-              Экономика внедрения
+              {t("smsRoiCalculator.economics")}
             </span>
             <Badge tone="info" className="font-mono">
-              NIST FIPS 204 · Без SMS
+              {t("smsRoiCalculator.noSms")}
             </Badge>
           </div>
-          <h1 className="type-h1 mt-2">ROI-калькулятор для АО «Банк ЦентрКредит»</h1>
+          <h1 className="type-h1 mt-2">{t("smsRoiCalculator.heading")}</h1>
           <p className="mt-1 max-w-2xl text-sm text-ink-secondary">
-            Раздельный расчёт прямой экономии бюджета банка на транзакционных SMS и предотвращённых потерь от фишинга и социальной инженерии.
+            {t("smsRoiCalculator.intro")}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div role="group" aria-label="Сценарии расчёта ROI" className="flex flex-wrap items-center gap-2">
-            {ROI_PRESETS.map(preset => {
+          <div role="group" aria-label={t("smsRoiCalculator.presets")} className="flex flex-wrap items-center gap-2">
+            {presets.map(preset => {
               const selected = activePreset === preset.id;
               return (
                 <button
@@ -109,7 +112,7 @@ export function SmsRoiCalculator() {
               icon={<RotateCcw className="size-4" />}
               onClick={() => applyPreset("base")}
             >
-              Сбросить к ТЗ
+              {t("smsRoiCalculator.reset")}
             </Button>
           )}
         </div>
@@ -122,11 +125,11 @@ export function SmsRoiCalculator() {
           className="lg:col-span-5"
           heading={
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="type-h2">Параметры расчёта</h2>
+              <h2 className="type-h2">{t("smsRoiCalculator.settings")}</h2>
               <Badge tone={activePreset === "custom" ? "warning" : "neutral"}>
                 {activePreset === "custom"
-                  ? "Свои значения"
-                  : ROI_PRESETS.find(p => p.id === activePreset)?.label}
+                  ? t("smsRoiCalculator.custom")
+                  : presets.find(p => p.id === activePreset)?.label}
               </Badge>
             </div>
           }
@@ -137,36 +140,36 @@ export function SmsRoiCalculator() {
             <section aria-labelledby="roi-sms-params-heading" className="space-y-5">
               <div className="flex items-center justify-between gap-2">
                 <h3 id="roi-sms-params-heading" className="type-h3 text-emerald-300">
-                  1. Транзакционный SMS-трафик (OpEx банка)
+                  {t("smsRoiCalculator.traffic")}
                 </h3>
                 <span className="font-mono text-xs text-ink-muted">U × N × P × M%</span>
               </div>
 
               <RoiSliderField
                 symbol="U"
-                label="Активные клиенты bcc.kz"
-                hint="Розничная база, получающая OTP-SMS (оценка)"
+                label={t("smsRoiCalculator.users")}
+                hint={t("smsRoiCalculator.retail")}
                 value={inputs.activeUsers}
                 min={ROI_RANGES.activeUsers.min}
                 max={ROI_RANGES.activeUsers.max}
                 step={ROI_RANGES.activeUsers.step}
-                unit="чел."
-                formatValue={v => `${formatCompactCount(v)} клиентов`}
-                formatBound={v => formatCompactCount(v)}
+                unit={t("smsRoiCalculator.people")}
+                formatValue={v => t("smsRoiCalculator.clientCount", { value: formatCompactCount(v, locale) })}
+                formatBound={v => formatCompactCount(v, locale)}
                 tone="emerald"
                 onChange={v => updateField("activeUsers", v)}
               />
 
               <RoiSliderField
                 symbol="N"
-                label="SMS-кодов на клиента в месяц"
-                hint="Среднее число платных транзакционных SMS"
+                label={t("smsRoiCalculator.smsPerClient")}
+                hint={t("smsRoiCalculator.average")}
                 value={inputs.smsPerUserMonth}
                 min={ROI_RANGES.smsPerUserMonth.min}
                 max={ROI_RANGES.smsPerUserMonth.max}
                 step={ROI_RANGES.smsPerUserMonth.step}
                 unit="SMS"
-                formatValue={v => `${Math.round(v)} SMS / мес`}
+                formatValue={v => t("smsRoiCalculator.smsMonth", { value: Math.round(v) })}
                 formatBound={v => `${v} SMS`}
                 tone="emerald"
                 onChange={v => updateField("smsPerUserMonth", v)}
@@ -174,8 +177,8 @@ export function SmsRoiCalculator() {
 
               <RoiSliderField
                 symbol="P"
-                label="Стоимость 1 SMS у операторов РК"
-                hint="Оптовый/корпоративный A2P-тариф (Kcell, Beeline, Tele2)"
+                label={t("smsRoiCalculator.smsCost")}
+                hint={t("smsRoiCalculator.tariff")}
                 value={inputs.smsCostTenge}
                 min={ROI_RANGES.smsCostTenge.min}
                 max={ROI_RANGES.smsCostTenge.max}
@@ -189,14 +192,14 @@ export function SmsRoiCalculator() {
 
               <RoiSliderField
                 symbol="M"
-                label="Доля перехода на SafeSign"
-                hint="Остальные SMS остаются на первичный онбординг и восстановление"
+                label={t("smsRoiCalculator.migration")}
+                hint={t("smsRoiCalculator.remaining")}
                 value={inputs.migrationPercent}
                 min={ROI_RANGES.migrationPercent.min}
                 max={ROI_RANGES.migrationPercent.max}
                 step={ROI_RANGES.migrationPercent.step}
                 unit="%"
-                formatValue={v => `${Math.round(v)}% операций без SMS`}
+                formatValue={v => t("smsRoiCalculator.share", { value: Math.round(v) })}
                 formatBound={v => `${v}%`}
                 tone="emerald"
                 onChange={v => updateField("migrationPercent", v)}
@@ -209,22 +212,22 @@ export function SmsRoiCalculator() {
             <section aria-labelledby="roi-fraud-params-heading" className="space-y-5">
               <div className="flex items-center justify-between gap-2">
                 <h3 id="roi-fraud-params-heading" className="type-h3 text-amber-300">
-                  2. Антифрод и социальная инженерия
+                  {t("smsRoiCalculator.antiFraud")}
                 </h3>
                 <span className="font-mono text-xs text-ink-muted">F × R%</span>
               </div>
 
               <RoiSliderField
                 symbol="F"
-                label="Годовые потери от фишинга и социнженерии"
-                hint="Суммарный ущерб клиентов и кредитного портфеля в год"
+                label={t("smsRoiCalculator.annualLoss")}
+                hint={t("smsRoiCalculator.lossHint")}
                 value={inputs.annualFraudLossTenge}
                 min={ROI_RANGES.annualFraudLossTenge.min}
                 max={ROI_RANGES.annualFraudLossTenge.max}
                 step={ROI_RANGES.annualFraudLossTenge.step}
                 unit="₸"
                 inputScale={1_000_000}
-                inputUnit="млн ₸"
+                inputUnit={t("smsRoiCalculator.millions")}
                 formatValue={v => formatCompactTenge(v)}
                 formatBound={v => formatCompactTenge(v)}
                 tone="gold"
@@ -233,14 +236,14 @@ export function SmsRoiCalculator() {
 
               <RoiSliderField
                 symbol="R"
-                label="Доля предотвращения фрода"
-                hint="За счёт Unphishable Passkeys, WYSIWYS и Co-Sign 2-of-2"
+                label={t("smsRoiCalculator.prevention")}
+                hint={t("smsRoiCalculator.preventionHint")}
                 value={inputs.fraudPreventionPercent}
                 min={ROI_RANGES.fraudPreventionPercent.min}
                 max={ROI_RANGES.fraudPreventionPercent.max}
                 step={ROI_RANGES.fraudPreventionPercent.step}
                 unit="%"
-                formatValue={v => `−${Math.round(v)}% потерь`}
+                formatValue={v => t("smsRoiCalculator.lossShare", { value: Math.round(v) })}
                 formatBound={v => `${v}%`}
                 tone="gold"
                 onChange={v => updateField("fraudPreventionPercent", v)}
@@ -258,7 +261,7 @@ export function SmsRoiCalculator() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <Badge tone="success">
                     <Building2 aria-hidden="true" className="size-3.5" />
-                    P&amp;L банка · OpEx
+                    {t("smsRoiCalculator.profit")}
                   </Badge>
                   <span className="font-mono text-xs tabular-nums text-emerald-300">
                     −{Math.round(result.inputs.migrationPercent)}% SMS
@@ -266,28 +269,28 @@ export function SmsRoiCalculator() {
                 </div>
 
                 <h2 className="mt-3 text-sm font-semibold text-ink-secondary">
-                  Прямая экономия банка (OpEx на SMS)
+                  {t("common.direct")}
                 </h2>
 
                 <div className="display-hero mt-2 font-mono text-bcc">
                   <RoiAnimatedNumber value={result.yearlySmsSavings} format={formatCompactTenge} />
                 </div>
                 <p className="mono-data mt-1 text-ink-secondary">
-                  {formatTenge(Math.round(result.yearlySmsSavings))} / год
+                  {formatTenge(Math.round(result.yearlySmsSavings))} {t("smsRoiCalculator.year")}
                 </p>
               </div>
 
               <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-bcc/20 pt-3">
                 <div>
-                  <dt className="text-xs text-ink-muted">В месяц</dt>
+                  <dt className="text-xs text-ink-muted">{t("smsRoiCalculator.monthly")}</dt>
                   <dd className="mono-data mt-0.5 font-bold text-ink-primary">
                     <RoiAnimatedNumber value={result.monthlySmsSavings} format={formatCompactTenge} />
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-ink-muted">Заменено SMS / год</dt>
+                  <dt className="text-xs text-ink-muted">{t("smsRoiCalculator.smsReplaced")}</dt>
                   <dd className="mono-data mt-0.5 font-bold text-emerald-300">
-                    {formatCompactCount(result.yearlySmsReplaced)}
+                    {formatCompactCount(result.yearlySmsReplaced, locale)}
                   </dd>
                 </div>
               </dl>
@@ -298,34 +301,34 @@ export function SmsRoiCalculator() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <Badge tone="warning">
                     <ShieldCheck aria-hidden="true" className="size-3.5" />
-                    Антифрод · Co-Sign 2-of-2
+                    {t("roi.smsRoiCalculator.antiFraud")}
                   </Badge>
                   <span className="font-mono text-xs tabular-nums text-amber-300">
-                    −{Math.round(result.inputs.fraudPreventionPercent)}% фрода
+                    −{Math.round(result.inputs.fraudPreventionPercent)}{t("smsRoiCalculator.fraudShare")}
                   </span>
                 </div>
 
                 <h2 className="mt-3 text-sm font-semibold text-ink-secondary">
-                  Предотвращённые потери (клиенты и банк)
+                  {t("smsRoiCalculator.saved")}
                 </h2>
 
                 <div className="display-hero mt-2 font-mono text-amber-300">
                   <RoiAnimatedNumber value={result.yearlyFraudSavings} format={formatCompactTenge} />
                 </div>
                 <p className="mono-data mt-1 text-ink-secondary">
-                  {formatTenge(Math.round(result.yearlyFraudSavings))} / год
+                  {formatTenge(Math.round(result.yearlyFraudSavings))} {t("smsRoiCalculator.year")}
                 </p>
               </div>
 
               <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-gold/25 pt-3">
                 <div>
-                  <dt className="text-xs text-ink-muted">В месяц</dt>
+                  <dt className="text-xs text-ink-muted">{t("smsRoiCalculator.monthly")}</dt>
                   <dd className="mono-data mt-0.5 font-bold text-ink-primary">
                     <RoiAnimatedNumber value={result.monthlyFraudSavings} format={formatCompactTenge} />
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-ink-muted">База потерь / год</dt>
+                  <dt className="text-xs text-ink-muted">{t("smsRoiCalculator.baseline")}</dt>
                   <dd className="mono-data mt-0.5 font-bold text-amber-200">
                     {formatCompactTenge(result.inputs.annualFraudLossTenge)}
                   </dd>
@@ -340,22 +343,22 @@ export function SmsRoiCalculator() {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs font-semibold uppercase tracking-wider text-quantum">
-                    Совокупный эффект
+                    {t("common.total")}
                   </span>
-                  <Badge tone="info">OpEx банка + защищённые средства</Badge>
+                  <Badge tone="info">{t("smsRoiCalculator.combined")}</Badge>
                 </div>
                 <p className="mt-1 text-xs text-ink-secondary">
-                  Сумма прямой экономии на SMS-трафике банка и предотвращённого ущерба клиентов и кредитного портфеля.
+                  {t("smsRoiCalculator.totalHint")}
                 </p>
               </div>
 
               <div className="shrink-0 sm:text-right">
                 <div className="display-kpi text-ink-primary">
                   <RoiAnimatedNumber value={result.totalYearlyImpact} format={formatCompactTenge} />
-                  <span className="ml-1.5 font-sans text-sm font-semibold text-ink-secondary">/ год</span>
+                  <span className="ml-1.5 font-sans text-sm font-semibold text-ink-secondary">{t("smsRoiCalculator.year")}</span>
                 </div>
                 <div className="mono-data mt-0.5 text-ink-secondary">
-                  ≈ <RoiAnimatedNumber value={result.monthlyTotalImpact} format={formatCompactTenge} /> / мес
+                  ≈ <RoiAnimatedNumber value={result.monthlyTotalImpact} format={formatCompactTenge} /> {t("smsRoiCalculator.month")}
                 </div>
               </div>
             </div>
@@ -367,10 +370,10 @@ export function SmsRoiCalculator() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h2 className="type-h2 flex items-center gap-2">
                   <TrendingDown aria-hidden="true" className="size-5 text-bcc" />
-                  Годовые расходы банка на SMS (OpEx)
+                  {t("smsRoiCalculator.annualSms")}
                 </h2>
                 <Badge tone="success" className="font-mono tabular-nums">
-                  Экономия {formatCompactTenge(result.yearlySmsSavings)}/год
+                  {t("smsRoiCalculator.savings")} {formatCompactTenge(result.yearlySmsSavings)}{t("smsRoiCalculator.perYear")}
                 </Badge>
               </div>
             }
@@ -379,9 +382,9 @@ export function SmsRoiCalculator() {
             <div className="space-y-4">
               <div>
                 <div className="mb-1.5 flex items-center justify-between gap-2 text-sm">
-                  <span className="text-ink-secondary">Сейчас (100% SMS-коды, {formatCompactCount(result.monthlySmsVolumeBefore)} SMS/мес)</span>
+                  <span className="text-ink-secondary">{t("smsRoiCalculator.now", { volume: formatCompactCount(result.monthlySmsVolumeBefore, locale) })}</span>
                   <span className="mono-data font-bold text-ink-primary">
-                    {formatCompactTenge(result.yearlySmsCostBefore)} / год
+                    {formatCompactTenge(result.yearlySmsCostBefore)} {t("smsRoiCalculator.year")}
                   </span>
                 </div>
                 <div className="h-3.5 w-full overflow-hidden rounded-full bg-terminal p-0.5">
@@ -392,10 +395,10 @@ export function SmsRoiCalculator() {
               <div>
                 <div className="mb-1.5 flex items-center justify-between gap-2 text-sm">
                   <span className="text-ink-secondary">
-                    С BCC SafeSign (остаточные {remainingSmsShare}% SMS: онбординг и резерв)
+                    {t("smsRoiCalculator.after", { share: remainingSmsShare })}
                   </span>
                   <span className="mono-data font-bold text-bcc">
-                    {formatCompactTenge(result.yearlySmsCostAfter)} / год
+                    {formatCompactTenge(result.yearlySmsCostAfter)} {t("smsRoiCalculator.year")}
                   </span>
                 </div>
                 <div className="h-3.5 w-full overflow-hidden rounded-full bg-terminal p-0.5">
@@ -421,37 +424,37 @@ export function SmsRoiCalculator() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="type-h2 flex items-center gap-2">
               <Info aria-hidden="true" className="size-5 text-quantum" />
-              Допущения и источники
+              {t("smsRoiCalculator.assumptions")}
             </h2>
-            <Badge tone="neutral">Интерактивная оценочная модель</Badge>
+            <Badge tone="neutral">{t("smsRoiCalculator.model")}</Badge>
           </div>
         }
         divided
       >
         <div className="space-y-4 text-sm text-ink-secondary">
           <p className="rounded-xl border border-quantum/30 bg-quantum/[.08] px-4 py-3 text-ink-primary">
-            Все значения по умолчанию и сценарии — это <strong className="font-semibold">аналитические оценки</strong> на базе открытых рыночных ориентиров РК. Любой параметр можно изменить ползунками или ввести вручную под внутренние тарифы и статистику БЦК.
+            {t("smsRoiCalculator.defaults")} <strong className="font-semibold">{t("smsRoiCalculator.estimates")}</strong> {t("smsRoiCalculator.basis")}
           </p>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <div className="rounded-xl border border-border-subtle bg-terminal/70 p-4">
-              <h3 className="type-h3 text-emerald-300">Разделение OpEx и фрода</h3>
+              <h3 className="type-h3 text-emerald-300">{t("smsRoiCalculator.split")}</h3>
               <p className="mt-1.5 text-xs leading-relaxed text-ink-secondary">
-                Прямая экономия на SMS (<code className="font-mono text-ink-primary">U × N × P × M% × 12</code>) напрямую сокращает операционные расходы (OpEx) банка на оплату A2P-трафика мобильным операторам (Kcell, Beeline, Tele2/Altel). Предотвращённый фрод (<code className="font-mono text-ink-primary">F × R%</code>) показан отдельно, так как защищает одновременно средства клиентов, депозитную базу и снижает риски списания мошеннических кредитов.
+                {t("smsRoiCalculator.smsSaving")}<code className="font-mono text-ink-primary">U × N × P × M% × 12</code>{t("smsRoiCalculator.carriers")}<code className="font-mono text-ink-primary">F × R%</code>{t("smsRoiCalculator.protected")}
               </p>
             </div>
 
             <div className="rounded-xl border border-border-subtle bg-terminal/70 p-4">
-              <h3 className="type-h3 text-amber-300">Остаточный SMS-трафик</h3>
+              <h3 className="type-h3 text-amber-300">{t("smsRoiCalculator.residualTraffic")}</h3>
               <p className="mt-1.5 text-xs leading-relaxed text-ink-secondary">
-                Модель не предполагает 100% отказ от SMS с первого дня: доля <code className="font-mono text-ink-primary">100% − M</code> резервируется на первичную привязку нового смартфона (SMS + биометрия ЦОИД), восстановление после утери устройства и клиентов на устаревших аппаратах.
+                {t("smsRoiCalculator.reserve")} <code className="font-mono text-ink-primary">100% − M</code> {t("smsRoiCalculator.recovery")}
               </p>
             </div>
 
             <div className="rounded-xl border border-border-subtle bg-terminal/70 p-4">
-              <h3 className="type-h3 text-quantum">Стресс-тест для CFO</h3>
+              <h3 className="type-h3 text-quantum">{t("smsRoiCalculator.stress")}</h3>
               <p className="mt-1.5 text-xs leading-relaxed text-ink-secondary">
-                Даже в «Консервативном» сценарии (<code className="font-mono text-ink-primary">1,5 млн</code> активных клиентов, <code className="font-mono text-ink-primary">5 SMS/мес</code>, оптовый тариф <code className="font-mono text-ink-primary">8 ₸</code>, <code className="font-mono text-ink-primary">50%</code> миграции в 1-й год) прямая экономия банка на SMS составляет <strong className="font-mono text-ink-primary">360 млн ₸/год</strong>, плюс <strong className="font-mono text-ink-primary">400 млн ₸/год</strong> предотвращённого фрода.
+                {t("smsRoiCalculator.conservative")}<code className="font-mono text-ink-primary">{t("smsRoiCalculator.million")}</code> {t("smsRoiCalculator.active")} <code className="font-mono text-ink-primary">{t("smsRoiCalculator.messages")}</code>{t("smsRoiCalculator.wholesale")} <code className="font-mono text-ink-primary">8 ₸</code>, <code className="font-mono text-ink-primary">50%</code> {t("smsRoiCalculator.migrationYear")} <strong className="font-mono text-ink-primary">{t("smsRoiCalculator.saving")}</strong>{t("smsRoiCalculator.plus")} <strong className="font-mono text-ink-primary">{t("smsRoiCalculator.prevented")}</strong> {t("smsRoiCalculator.fraudLoss")}
               </p>
             </div>
           </div>

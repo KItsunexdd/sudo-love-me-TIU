@@ -1,15 +1,21 @@
+"use client";
+
+import type { Translate } from "@/lib/i18n";
+import { useT } from "@/components/shell/LocaleProvider";
 import Link from "next/link";
 import { Calculator, Home, ShieldAlert, ShieldCheck, Users } from "lucide-react";
 import { Badge, Card } from "@/components/ui";
 
-const quickLinks = [
-  { href: "/", label: "Демо-стенд", note: "Переводы, Passkey + ML-DSA-65 и 6 атак", icon: Home },
-  { href: "/cosign", label: "Вторая рука", note: "Мобильный кабинет Co-Sign 2-of-2", icon: Users },
-  { href: "/soc", label: "SOC-центр", note: "Журнал отражённых атак и метрики", icon: ShieldCheck },
-  { href: "/roi", label: "ROI-калькулятор", note: "Экономия БЦК на отказе от SMS", icon: Calculator },
-];
+const getQuickLinks = (t: Translate) => ([
+  { href: "/", label: t("common.demo"), note: t("not-found.demoNote"), icon: Home },
+  { href: "/cosign", label: t("common.secondHand"), note: t("not-found.cosignNote"), icon: Users },
+  { href: "/soc", label: t("common.soc"), note: t("not-found.socNote"), icon: ShieldCheck },
+  { href: "/roi", label: t("common.roi"), note: t("not-found.roiNote"), icon: Calculator },
+]);
 
 export default function NotFound() {
+  const { t } = useT();
+  const quickLinks = getQuickLinks(t);
   return (
     <main className="shell-container flex min-h-[calc(100dvh-var(--topbar-height))] items-center justify-center py-10">
       <Card variant="elevated" className="w-full max-w-2xl space-y-6 p-6 sm:p-8">
@@ -19,15 +25,15 @@ export default function NotFound() {
           </span>
           <div className="min-w-0 space-y-1">
             <Badge tone="danger" className="font-mono tabular-nums">HTTP 404 • ERR_ROUTE_NOT_FOUND</Badge>
-            <h1 className="type-h1">Страница не найдена</h1>
+            <h1 className="type-h1">{t("not-found.missing")}</h1>
           </div>
         </div>
 
         <p className="text-sm leading-relaxed text-ink-secondary">
-          Запрошенный адрес отсутствует в BCC SafeSign или устарел. Выберите нужный раздел стенда ниже, чтобы продолжить демонстрацию.
+          {t("not-found.hint")}
         </p>
 
-        <nav aria-label="Быстрый переход по разделам" className="grid gap-3 sm:grid-cols-2">
+        <nav aria-label={t("not-found.quickLinks")} className="grid gap-3 sm:grid-cols-2">
           {quickLinks.map(({ href, label, note, icon: Icon }) => (
             <Link
               key={href}
@@ -51,7 +57,7 @@ export default function NotFound() {
             href="/"
             className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-bcc px-5 py-2 text-sm font-semibold text-ink-inverse shadow-glow-bcc transition duration-150 hover:bg-bcc-hover active:bg-bcc-active"
           >
-            Вернуться на Демо-стенд
+            {t("not-found.back")}
           </Link>
         </div>
       </Card>

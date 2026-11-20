@@ -126,6 +126,7 @@ export interface TransactionRecord {
   riskScore: number;
   riskLevel: RiskLevel;
   riskReasons: string[];
+  riskCodes?: string[];
   requiresCoSign: boolean;
   cosignerUserId?: string;
   primarySignature?: SignatureBundle;

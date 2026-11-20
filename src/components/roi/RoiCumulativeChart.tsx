@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/components/shell/LocaleProvider";
 import { useId, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -29,6 +30,7 @@ function formatAxisTick(value: number): string {
 }
 
 export function RoiCumulativeChart({ points }: RoiCumulativeChartProps) {
+  const { t } = useT();
   const uid = useId();
   const [selectedIndex, setSelectedIndex] = useState(11);
   const safeIndex = Math.min(Math.max(0, selectedIndex), Math.max(0, points.length - 1));
@@ -69,9 +71,9 @@ export function RoiCumulativeChart({ points }: RoiCumulativeChartProps) {
       heading={
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 className="type-h2">Накопленный эффект за 12 месяцев</h2>
+            <h2 className="type-h2">{t("roiCumulativeChart.heading")}</h2>
             <p className="mt-0.5 text-xs text-ink-muted">
-              Наведите или выберите месяц для просмотра накопленной экономии
+              {t("roiCumulativeChart.selectMonth")}
             </p>
           </div>
           {activePoint && (
@@ -88,7 +90,7 @@ export function RoiCumulativeChart({ points }: RoiCumulativeChartProps) {
           <div>
             <div className="flex items-center gap-1.5 text-xs text-ink-secondary">
               <span aria-hidden="true" className="size-2 rounded-full bg-bcc" />
-              OpEx на SMS (банк)
+              {t("roiCumulativeChart.sms")}
             </div>
             <div className="mono-data mt-0.5 font-bold text-bcc">
               {formatCompactTenge(activePoint.smsCumulative)}
@@ -97,7 +99,7 @@ export function RoiCumulativeChart({ points }: RoiCumulativeChartProps) {
           <div>
             <div className="flex items-center gap-1.5 text-xs text-ink-secondary">
               <span aria-hidden="true" className="size-2 rounded-full bg-gold" />
-              Предотвращённый фрод
+              {t("roiCumulativeChart.fraud")}
             </div>
             <div className="mono-data mt-0.5 font-bold text-amber-300">
               {formatCompactTenge(activePoint.fraudCumulative)}
@@ -106,7 +108,7 @@ export function RoiCumulativeChart({ points }: RoiCumulativeChartProps) {
           <div>
             <div className="flex items-center gap-1.5 text-xs text-ink-secondary">
               <span aria-hidden="true" className="size-2 rounded-full bg-quantum" />
-              Совокупный эффект
+              {t("common.total")}
             </div>
             <div className="mono-data mt-0.5 font-bold text-ink-primary">
               {formatCompactTenge(activePoint.totalCumulative)}
@@ -119,7 +121,7 @@ export function RoiCumulativeChart({ points }: RoiCumulativeChartProps) {
         <svg
           viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
           role="img"
-          aria-label="График накопленного эффекта BCC SafeSign за 12 месяцев: прямая экономия банка на SMS и совокупный эффект с учётом предотвращённого фрода"
+          aria-label={t("roiCumulativeChart.chart")}
           className="h-auto w-full min-w-[460px] select-none"
         >
           <defs>
@@ -238,7 +240,7 @@ export function RoiCumulativeChart({ points }: RoiCumulativeChartProps) {
                   className="cursor-pointer rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-bcc"
                   role="button"
                   tabIndex={0}
-                  aria-label={`${point.label}: OpEx ${formatCompactTenge(point.smsCumulative)}, совокупный эффект ${formatCompactTenge(point.totalCumulative)}`}
+                  aria-label={t("roiCumulativeChart.point", { label: point.label, value: formatCompactTenge(point.smsCumulative), value2: formatCompactTenge(point.totalCumulative) })}
                   onMouseEnter={() => setSelectedIndex(index)}
                   onFocus={() => setSelectedIndex(index)}
                   onClick={() => setSelectedIndex(index)}
@@ -259,14 +261,14 @@ export function RoiCumulativeChart({ points }: RoiCumulativeChartProps) {
         <div className="flex flex-wrap items-center gap-4">
           <span className="inline-flex items-center gap-1.5">
             <span aria-hidden="true" className="h-0.5 w-4 rounded bg-bcc" />
-            Прямая экономия банка (OpEx на SMS)
+            {t("common.direct")}
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span aria-hidden="true" className="h-0.5 w-4 rounded bg-gold" />
-            Совокупный эффект (+ предотвращённый фрод)
+            {t("roiCumulativeChart.combined")}
           </span>
         </div>
-        <span className="font-mono text-ink-muted">Линейная модель без сезонности</span>
+        <span className="font-mono text-ink-muted">{t("roiCumulativeChart.linear")}</span>
       </div>
     </Card>
   );

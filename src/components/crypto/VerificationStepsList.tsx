@@ -1,5 +1,8 @@
 "use client";
 
+import { isMessageKey, type Translate } from "@/lib/i18n";
+import { diagnosticText } from "@/lib/i18n/server-text";
+import { useT } from "@/components/shell/LocaleProvider";
 import { motion, useReducedMotion } from "framer-motion";
 import { CircleCheck, CircleMinus, CircleX, LoaderCircle, ShieldAlert } from "lucide-react";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
@@ -7,29 +10,32 @@ import type { VerificationStepResult } from "@/lib/db/types";
 import { formatMs } from "@/lib/ui/format";
 import { reducedMotionVariants, verificationListVariants, verificationStepVariants } from "@/lib/ui/motion";
 
-const steps = [
-  "Наличие транзакции и срок действия (TTL)",
-  "Защита от повтора (одноразовый Nonce)",
-  "Целостность WYSIWYS (сверка SHA-256)",
-  "Привязка домена (Origin и RP ID Hash)",
-  "Подпись WebAuthn (ECDSA P-256)",
-  "Постквантовая подпись ML-DSA-65 (FIPS 204)",
-  "Антифрод-политика и правило Co-Sign 2-of-2",
-];
+const stepCodes = [
+  "TX_EXISTENCE_AND_TTL",
+  "REPLAY_PROTECTION",
+  "WYSIWYS_INTEGRITY",
+  "ORIGIN_AND_RPID",
+  "WEBAUTHN_SIGNATURE",
+  "POST_QUANTUM_ML_DSA",
+  "RISK_AND_POLICY_GATE",
+] as const;
 
 type State = VerificationStepResult["outcome"] | "IDLE" | "RUNNING";
-const appearance = {
+const getAppearance = (t: Translate) => ({
   IDLE: { style: "border-border-default bg-surface/60 text-ink-muted", text: "—", tone: "neutral", Icon: null },
-  RUNNING: { style: "border-quantum/45 bg-quantum/[.08] text-quantum", text: "Проверка", tone: "info", Icon: LoaderCircle },
-  PASS: { style: "border-bcc/35 bg-bcc/[.07] text-bcc", text: "Пройдено", tone: "success", Icon: CircleCheck },
-  FAIL: { style: "border-danger/60 bg-danger/[.16] text-danger-text shadow-[0_0_16px_-6px_rgba(239,68,68,0.55)]", text: "Отказ", tone: "danger", Icon: CircleX },
-  SKIPPED: { style: "border-border-default bg-surface/50 text-ink-muted", text: "Пропущено", tone: "neutral", Icon: CircleMinus },
-  COMPROMISED: { style: "border-gold/45 bg-gold/[.14] text-amber-300", text: "Симуляция", tone: "warning", Icon: ShieldAlert },
-} satisfies Record<State, { style: string; text: string; tone: BadgeTone; Icon: typeof CircleCheck | null }>;
+  RUNNING: { style: "border-quantum/45 bg-quantum/[.08] text-quantum", text: t("common.verification"), tone: "info", Icon: LoaderCircle },
+  PASS: { style: "border-bcc/35 bg-bcc/[.07] text-bcc", text: t("verificationStepsList.passed"), tone: "success", Icon: CircleCheck },
+  FAIL: { style: "border-danger/60 bg-danger/[.16] text-danger-text shadow-[0_0_16px_-6px_rgba(239,68,68,0.55)]", text: t("verificationStepsList.fail"), tone: "danger", Icon: CircleX },
+  SKIPPED: { style: "border-border-default bg-surface/50 text-ink-muted", text: t("verificationStepsList.skipped"), tone: "neutral", Icon: CircleMinus },
+  COMPROMISED: { style: "border-gold/45 bg-gold/[.14] text-amber-300", text: t("verificationStepsList.simulated"), tone: "warning", Icon: ShieldAlert },
+} satisfies Record<State, { style: string; text: string; tone: BadgeTone; Icon: typeof CircleCheck | null }>);
 
 export function VerificationStepsList({ trace = [], runningStep, failureCode, compact = false }: {
   trace?: readonly VerificationStepResult[]; runningStep?: number; failureCode?: string; compact?: boolean;
 }) {
+  const { t, locale } = useT();
+  const appearance = getAppearance(t);
+
   const reduce = useReducedMotion();
   const rows = new Map(trace.map(row => [row.step, row]));
   const hasTrace = trace.length > 0;
@@ -45,13 +51,15 @@ export function VerificationStepsList({ trace = [], runningStep, failureCode, co
         key={traceKey}
         initial={hasTrace && !reduce ? "hidden" : false}
         animate="visible"
-        aria-label="Шаги серверной проверки"
+        aria-label={t("verificationStepsList.steps")}
         variants={reduce || !hasTrace ? reducedMotionVariants : verificationListVariants}
         className={compact ? "space-y-1" : "space-y-1.5"}
       >
-        {steps.map((label, index) => {
+        {stepCodes.map((code, index) => {
           const step = index + 1;
           const result = rows.get(step);
+          const key = `step.${result?.code ?? code}`;
+          const label = isMessageKey(key) ? t(key) : (result?.label ?? code);
           const state = result?.outcome ?? (runningStep === step ? "RUNNING" : "IDLE");
           const { style, text, tone, Icon } = appearance[state];
           return (
@@ -73,7 +81,7 @@ export function VerificationStepsList({ trace = [], runningStep, failureCode, co
                   {label}
                 </div>
                 {result?.details && state !== "SKIPPED" && (!compact || state === "FAIL" || state === "COMPROMISED") && (
-                  <div className="text-xs leading-snug text-ink-secondary">{result.details}</div>
+                  <div className="text-xs leading-snug text-ink-secondary">{diagnosticText(locale, result.details)}</div>
                 )}
               </div>
               <Badge tone={tone} className="col-start-2 w-fit tabular-nums sm:col-start-auto">
@@ -86,7 +94,7 @@ export function VerificationStepsList({ trace = [], runningStep, failureCode, co
       </motion.ol>
       {hasTamperEvidence && (
         <p className="rounded-xl border border-quantum/35 bg-quantum/[.09] px-3 py-2 text-xs leading-relaxed text-sky-200 sm:text-sm">
-          Диагностика показала, что WebAuthn и ML-DSA-65 отклоняют подписи для изменённого хэша даже без сверки с исходными реквизитами.
+          {t("verificationStepsList.tamperHint")}
         </p>
       )}
     </div>

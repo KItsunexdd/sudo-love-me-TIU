@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/components/shell/LocaleProvider";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
@@ -9,11 +10,12 @@ import { Button, ErrorCard, Modal, PhoneFrame, Skeleton } from "@/components/ui"
 import { useDemoMode } from "@/components/shell/DemoModeProvider";
 
 function SecondPhoneTrigger({ cosignerUserId }: { cosignerUserId: string }) {
+  const { locale, t } = useT();
   const { mode } = useDemoMode();
   const [open, setOpen] = useState(false);
   const [image, setImage] = useState("");
   const [error, setError] = useState(false);
-  const href = `/cosign?userId=${encodeURIComponent(cosignerUserId)}&mode=${mode}`;
+  const href = `/cosign?userId=${encodeURIComponent(cosignerUserId)}&mode=${mode}&lang=${locale}`;
 
   useEffect(() => {
     if (!open) return;
@@ -37,7 +39,7 @@ function SecondPhoneTrigger({ cosignerUserId }: { cosignerUserId: string }) {
           icon={<QrCode className="size-4 text-bcc" />}
           onClick={() => setOpen(true)}
         >
-          Открыть на втором телефоне
+          {t("cosignEmbedSlot.openPhone")}
         </Button>
         <Link
           href={href}
@@ -53,8 +55,8 @@ function SecondPhoneTrigger({ cosignerUserId }: { cosignerUserId: string }) {
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        title="Открыть на втором телефоне"
-        description="Отсканируйте QR-код камерой второго смартфона, чтобы принимать запросы «Второй руки» в реальном времени."
+        title={t("cosignEmbedSlot.openPhone")}
+        description={t("cosignEmbedSlot.scan")}
         footer={
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Link
@@ -63,9 +65,9 @@ function SecondPhoneTrigger({ cosignerUserId }: { cosignerUserId: string }) {
               rel="noopener noreferrer"
               className="inline-flex min-h-9 items-center gap-1.5 rounded-[10px] text-sm font-semibold text-bcc hover:underline"
             >
-              Открыть /cosign в новой вкладке <ExternalLink aria-hidden="true" className="size-4" />
+              {t("cosignEmbedSlot.newTab")} <ExternalLink aria-hidden="true" className="size-4" />
             </Link>
-            <Button size="sm" variant="secondary" onClick={() => setOpen(false)}>Закрыть</Button>
+            <Button size="sm" variant="secondary" onClick={() => setOpen(false)}>{t("common.close")}</Button>
           </div>
         }
       >
@@ -78,17 +80,17 @@ function SecondPhoneTrigger({ cosignerUserId }: { cosignerUserId: string }) {
               unoptimized
               width={200}
               height={200}
-              alt="QR-код экрана Второй руки"
+              alt={t("cosignEmbedSlot.qr")}
               src={image}
               className="rounded-xl border border-border-strong bg-white p-1"
             />
           ) : error ? (
-            <ErrorCard error={{ failureCode: "ERR_QR", message: "Не удалось построить QR-код. Откройте ссылку ниже." }} />
+            <ErrorCard error={{ failureCode: "ERR_QR", message: t("cosignEmbedSlot.qrError") }} />
           ) : (
             <Skeleton className="size-[200px] rounded-xl" />
           )}
           <p className="max-w-sm text-xs leading-relaxed text-ink-secondary">
-            Для реального второго смартфона откройте стенд по HTTPS-адресу, доступному обоим устройствам.
+            {t("cosignEmbedSlot.publicLink")}
           </p>
         </div>
       </Modal>
@@ -97,9 +99,10 @@ function SecondPhoneTrigger({ cosignerUserId }: { cosignerUserId: string }) {
 }
 
 function EmbedSkeleton() {
+  const { t } = useT();
   return (
     <PhoneFrame preset="compact">
-      <div aria-busy="true" aria-label="Открываем экран Второй руки" className="space-y-3 p-3">
+      <div aria-busy="true" aria-label={t("cosignEmbedSlot.opening")} className="space-y-3 p-3">
         <div className="flex items-center gap-2.5">
           <Skeleton className="size-9 rounded-xl" />
           <div className="flex-1 space-y-1.5">

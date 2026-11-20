@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/components/shell/LocaleProvider";
 import { useEffect, useMemo, useState } from "react";
 import { Badge, ErrorCard, JsonDiffViewer, Spinner } from "@/components/ui";
 import { computeTamperDiff, fromBase64, hashPayload } from "@/lib/crypto/canonical";
@@ -7,6 +8,7 @@ import type { TransactionRecord } from "@/lib/db/types";
 import { formatMs } from "@/lib/ui/format";
 
 function CompareSignedCopy({ tx, field }: { tx: TransactionRecord; field: "amount" | "iban" }) {
+  const { t } = useT();
   const comparison = useMemo(() => {
     const copy = field === "amount" ? { ...tx.payload, amountTenge: 500000 } :
       { ...tx.payload, recipientAccount: "KZ99856000000666DROP", recipientName: "Дроппер Х" };
@@ -30,15 +32,15 @@ function CompareSignedCopy({ tx, field }: { tx: TransactionRecord; field: "amoun
     return () => { active = false; };
   }, [signature, comparison]);
   return <div className="space-y-2">
-    <p className="text-sm text-ink-secondary">Локальное сравнение копии реквизитов · {comparison.diff.length ? "значения изменены" : "значения совпадают"}</p>
+    <p className="text-sm text-ink-secondary">{t("tamperDiffViewer.compare")} {comparison.diff.length ? t("tamperDiffViewer.changed") : t("tamperDiffViewer.same")}</p>
     <JsonDiffViewer value={comparison.copy} signedHash={tx.txHashHex} receivedHash={comparison.digest.txHashHex} tamperDiff={comparison.diff} />
-    {error ? <ErrorCard error={{ failureCode: "ERR_LOCAL_VERIFY", message: "Не удалось прочитать архивную подпись для сравнения." }} /> :
-      !signature?.pqPublicKey ? <p className="text-sm text-ink-muted">Открытый ключ для этой подписи не сохранён.</p> :
+    {error ? <ErrorCard error={{ failureCode: "ERR_LOCAL_VERIFY", message: t("tamperDiffViewer.readError") }} /> :
+      !signature?.pqPublicKey ? <p className="text-sm text-ink-muted">{t("tamperDiffViewer.noKey")}</p> :
         proof ? <div className="flex flex-wrap items-center gap-2" role="status">
-          <Badge tone={proof.original ? "success" : "danger"}>ML-DSA · оригинал {proof.original ? "подтверждён" : "отклонён"}</Badge>
-          <Badge tone={proof.copy ? "success" : "danger"}>ML-DSA · копия {proof.copy ? "подтверждена" : "отклонена"}</Badge>
+          <Badge tone={proof.original ? "success" : "danger"}>{t("tamperDiffViewer.original")} {proof.original ? t("tamperDiffViewer.verified") : t("tamperDiffViewer.rejected")}</Badge>
+          <Badge tone={proof.copy ? "success" : "danger"}>{t("tamperDiffViewer.copy")} {proof.copy ? t("tamperDiffViewer.verifiedCopy") : t("tamperDiffViewer.rejectedCopy")}</Badge>
           <span className="mono-data text-ink-secondary">{formatMs(proof.ms)}</span>
-        </div> : <Spinner label="Проверяем подпись для обоих хэшей…" />}
+        </div> : <Spinner label={t("tamperDiffViewer.checking")} />}
   </div>;
 }
 

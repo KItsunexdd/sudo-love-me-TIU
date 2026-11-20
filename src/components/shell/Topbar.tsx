@@ -1,5 +1,7 @@
 "use client";
 
+import { russian, type Translate } from "@/lib/i18n";
+import { LocaleSwitch, useT } from "@/components/shell/LocaleProvider";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Fingerprint, Menu, RotateCcw, ShieldCheck, Zap } from "lucide-react";
@@ -19,26 +21,27 @@ import { useToast } from "@/components/ui/Toast";
 import { useDemoMode } from "./DemoModeProvider";
 import { cosignHref } from "@/components/cosign/cosignDetails";
 
-const modeOptions: readonly Segment<Mode>[] = [
-  { value: "B2C", label: "bcc.kz (Семья)" },
-  { value: "B2B", label: "BCC Business (МСБ)", tone: "gold" },
-];
+const getModeOptions = (t: Translate): readonly Segment<Mode>[] => ([
+  { value: "B2C", label: t("topbar.family") },
+  { value: "B2B", label: t("topbar.business"), tone: "gold" },
+]);
 
-const tabs = [
-  { href: "/", label: "Демо-стенд" },
-  { href: "/cosign", label: "Вторая рука" },
-  { href: "/soc", label: "SOC-центр" },
+const getTabs = (t: Translate) => ([
+  { href: "/", label: t("common.demo") },
+  { href: "/cosign", label: t("common.secondHand") },
+  { href: "/soc", label: t("common.soc") },
   { href: "/roi", label: "ROI" },
-];
+]);
 
-const sseMeta: Record<ConnectionStatus, { tone: BadgeTone; label: string; pulse: boolean }> = {
+const getSseMeta = (t: Translate): Record<ConnectionStatus, { tone: BadgeTone; label: string; pulse: boolean }> => ({
   connecting: { tone: "neutral", label: "SSE…", pulse: true },
   live: { tone: "success", label: "SSE Live", pulse: true },
-  polling: { tone: "warning", label: "Опрос", pulse: true },
-  offline: { tone: "danger", label: "Офлайн", pulse: false },
-};
+  polling: { tone: "warning", label: t("topbar.polling"), pulse: true },
+  offline: { tone: "danger", label: t("topbar.offline"), pulse: false },
+});
 
 function ResetDemoModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t } = useT();
   const [keepDevices, setKeepDevices] = useState(true);
   const [busy, setBusy] = useState(false);
   const submitting = useRef(false);
@@ -68,13 +71,13 @@ function ResetDemoModal({ open, onClose }: { open: boolean; onClose: () => void 
         } catch {
           setError({
             status: "ERROR", failureCode: "ERR_CLIENT_KEYSTORE",
-            message: "Демо сброшено на сервере, но браузер не смог удалить локальные ключи.",
+            message: russian("topbar.resetFailed"),
           });
           return;
         }
       }
       close();
-      toast({ title: "Демо сброшено", description: "Балансы и журнал возвращены к исходному состоянию.", tone: "success" });
+      toast({ titleKey: "topbar.resetDone", descriptionKey: "topbar.resetHint", tone: "success" });
     } finally {
       submitting.current = false;
       setBusy(false);
@@ -82,16 +85,16 @@ function ResetDemoModal({ open, onClose }: { open: boolean; onClose: () => void 
   }
 
   return (
-    <Modal open={open} onClose={close} dismissible={!busy} title="Сбросить демо"
-      description="Балансы и журнал событий будут сброшены для всех участников демо."
+    <Modal open={open} onClose={close} dismissible={!busy} title={t("topbar.reset")}
+      description={t("topbar.resetScope")}
       footer={<div className="flex flex-wrap justify-end gap-2">
-        <Button variant="ghost" onClick={close} disabled={busy}>Отмена</Button>
-        <Button variant="warning" loading={busy} onClick={() => void reset()}>Сбросить балансы и атаки</Button>
+        <Button variant="ghost" onClick={close} disabled={busy}>{t("common.cancel")}</Button>
+        <Button variant="warning" loading={busy} onClick={() => void reset()}>{t("topbar.resetConfirm")}</Button>
       </div>}>
       <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-border-default bg-terminal p-3 text-sm font-semibold">
         <input type="checkbox" className="size-4 accent-bcc" disabled={busy} checked={keepDevices}
           onChange={event => setKeepDevices(event.target.checked)} />
-        Сохранить мои Passkeys
+        {t("topbar.keep")}
       </label>
       {error && <ErrorCard error={error} className="mt-3" />}
     </Modal>
@@ -101,6 +104,7 @@ function ResetDemoModal({ open, onClose }: { open: boolean; onClose: () => void 
 function DeviceModal({ open, onClose, userId, device }: {
   open: boolean; onClose: () => void; userId: string; device?: LocalDevice;
 }) {
+  const { t } = useT();
   const [preferSoftware, setPreferSoftware] = useState(false);
   const [busy, setBusy] = useState(false);
   const submitting = useRef(false);
@@ -123,8 +127,8 @@ function DeviceModal({ open, onClose, userId, device }: {
       try {
         const registered = await signer.registerDevice(userId, { preferSoftware });
         toast({
-          title: "Устройство привязано",
-          description: registered.deviceKind === "SOFTWARE_FALLBACK" ? "Режим WebCrypto ECDSA + ML-DSA-65 (Software Fallback)." : "Passkey + ML-DSA-65 готовы к подписи.",
+          titleKey: "topbar.deviceBound",
+          descriptionKey: registered.deviceKind === "SOFTWARE_FALLBACK" ? "topbar.fallback" : "topbar.ready",
           tone: "success",
         });
         close();
@@ -132,7 +136,7 @@ function DeviceModal({ open, onClose, userId, device }: {
         setError(signer.toClientError(cause));
       }
     } catch {
-      setError({ status: "ERROR", failureCode: "ERR_CLIENT", message: "Не удалось загрузить модуль подписи." });
+      setError({ status: "ERROR", failureCode: "ERR_CLIENT", message: russian("common.moduleUnavailable") });
     } finally {
       submitting.current = false;
       setBusy(false);
@@ -140,26 +144,26 @@ function DeviceModal({ open, onClose, userId, device }: {
   }
 
   return (
-    <Modal open={open} onClose={close} dismissible={!busy} title={device ? "Устройство SafeSign" : "Привязать устройство"}
-      description={device ? undefined : "Гибридная подпись банковских операций без SMS."}
+    <Modal open={open} onClose={close} dismissible={!busy} title={device ? t("topbar.device") : t("common.enroll")}
+      description={device ? undefined : t("topbar.hybrid")}
       footer={<div className="flex flex-wrap justify-end gap-2">
-        <Button variant="ghost" onClick={close} disabled={busy}>Закрыть</Button>
+        <Button variant="ghost" onClick={close} disabled={busy}>{t("common.close")}</Button>
         <Button loading={busy} icon={<Fingerprint className="size-4" />} onClick={() => void register()}>
-          {device ? "Привязать новое устройство" : "Привязать устройство"}
+          {device ? t("topbar.enrollNew") : t("common.enroll")}
         </Button>
       </div>}>
       {device && (
         <dl className="mb-4 space-y-2 rounded-xl border border-border-default bg-terminal p-3.5 text-sm">
-          <div className="flex flex-wrap items-center gap-2"><dt className="text-ink-muted">Устройство</dt><dd className="font-semibold">{device.deviceName}</dd><Badge status={device.deviceKind} className="!whitespace-normal" /></div>
-          <div className="flex flex-wrap items-center gap-2 text-ink-secondary"><dt className="text-ink-muted">Отпечаток ML-DSA-65</dt><dd className="mono-data text-quantum">{device.pqKeyFingerprint}</dd></div>
+          <div className="flex flex-wrap items-center gap-2"><dt className="text-ink-muted">{t("topbar.deviceLabel")}</dt><dd className="font-semibold">{device.deviceName}</dd><Badge status={device.deviceKind} className="!whitespace-normal" /></div>
+          <div className="flex flex-wrap items-center gap-2 text-ink-secondary"><dt className="text-ink-muted">{t("common.fingerprint")}</dt><dd className="mono-data text-quantum">{device.pqKeyFingerprint}</dd></div>
         </dl>
       )}
       <label className="flex cursor-pointer items-start gap-3 text-sm">
         <input type="checkbox" checked={preferSoftware} disabled={busy} onChange={event => setPreferSoftware(event.target.checked)}
           className="mt-0.5 size-4 shrink-0 accent-bcc" />
-        <span>Нет сканера отпечатка (Software Key)</span>
+        <span>{t("topbar.noScanner")}</span>
       </label>
-      {preferSoftware && <p className="mt-2 text-sm text-ink-secondary">Режим WebCrypto ECDSA + ML-DSA-65 (Software Fallback).</p>}
+      {preferSoftware && <p className="mt-2 text-sm text-ink-secondary">{t("topbar.fallback")}</p>}
       {error && <ErrorCard error={error} className="mt-3" />}
     </Modal>
   );
@@ -180,6 +184,10 @@ function usePendingCount(cosignerId: string, lastEventId: number | undefined, sy
 }
 
 function CosignTopbar({ pathname }: { pathname: string }) {
+  const { locale, t } = useT();
+  const sseMeta = getSseMeta(t);
+  const tabs = getTabs(t);
+  const modeOptions = getModeOptions(t);
   const router = useRouter();
   const { mode, setMode, cosignerId: defaultCosigner } = useDemoMode();
   const cosignerId = useSearchParams().get("userId")?.trim() || defaultCosigner;
@@ -192,7 +200,7 @@ function CosignTopbar({ pathname }: { pathname: string }) {
   return (
     <header className="sticky top-0 z-40 border-b border-border-default bg-surface/95 backdrop-blur-md">
       <div className="mx-auto flex h-14 w-full max-w-[460px] items-center justify-between gap-2 px-3.5 sm:max-w-[var(--content-width)] sm:px-4 xl:px-6">
-        <Link href={`/?mode=${mode}`} className="inline-flex shrink-0 items-center gap-2 rounded-xl py-1 font-extrabold tracking-tight text-ink-primary transition-colors hover:text-bcc">
+        <Link href={`/?mode=${mode}&lang=${locale}`} className="inline-flex shrink-0 items-center gap-2 rounded-xl py-1 font-extrabold tracking-tight text-ink-primary transition-colors hover:text-bcc">
           <span className="grid size-8 place-items-center rounded-xl border border-bcc/40 bg-bcc/10 text-bcc">
             <ShieldCheck aria-hidden="true" className="size-[18px]" />
           </span>
@@ -208,7 +216,7 @@ function CosignTopbar({ pathname }: { pathname: string }) {
           </span>
           <button
             type="button"
-            aria-label="Открыть меню навигации"
+            aria-label={t("topbar.openMenu")}
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen(true)}
             className="relative grid size-10 place-items-center rounded-xl border border-border-strong bg-elevated text-ink-primary transition duration-150 hover:border-bcc/50 hover:bg-surface-hover"
@@ -216,7 +224,7 @@ function CosignTopbar({ pathname }: { pathname: string }) {
             <Menu aria-hidden="true" className="size-5" />
             {pendingCount > 0 && (
               <span
-                aria-label={`Ожидают подписи: ${pendingCount}`}
+                aria-label={t("topbar.pending", { pendingCount })}
                 className="absolute -right-1 -top-1 grid min-w-[18px] place-items-center rounded-full bg-danger-solid px-1 font-mono text-xs font-bold tabular-nums text-white motion-safe:animate-pulse"
               >
                 {pendingCount}
@@ -229,8 +237,8 @@ function CosignTopbar({ pathname }: { pathname: string }) {
       <Drawer
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
-        title="Меню BCC SafeSign"
-        description="Переключение разделов, режима демо и сброс данных."
+        title={t("topbar.menu")}
+        description={t("topbar.menuHint")}
         className="max-w-[360px]"
         footer={
           <Button
@@ -242,34 +250,35 @@ function CosignTopbar({ pathname }: { pathname: string }) {
               setResetOpen(true);
             }}
           >
-            Сбросить демо
+            {t("topbar.reset")}
           </Button>
         }
       >
         <div className="space-y-5">
+          <LocaleSwitch />
           <section className="space-y-2">
-            <p className="type-label text-ink-muted">Режим банка</p>
+            <p className="type-label text-ink-muted">{t("topbar.bankMode")}</p>
             <SegmentedControl
-              label="Режим демо"
+              label={t("topbar.mode")}
               options={modeOptions}
               value={mode}
               onChange={next => {
                 setMode(next);
-                router.replace(cosignHref(next));
+                router.replace(cosignHref(next, null, locale));
               }}
               className="w-full"
             />
           </section>
 
-          <nav aria-label="Разделы SafeSign" className="space-y-1.5">
-            <p className="type-label text-ink-muted">Разделы</p>
+          <nav aria-label={t("topbar.sections")} className="space-y-1.5">
+            <p className="type-label text-ink-muted">{t("topbar.sectionsLabel")}</p>
             {tabs.map(tab => {
               const active = pathname === tab.href || (tab.href !== "/" && pathname.startsWith(`${tab.href}/`));
               const count = tab.href === "/cosign" ? pendingCount : 0;
               return (
                 <Link
                   key={tab.href}
-                  href={`${tab.href}?mode=${mode}`}
+                  href={`${tab.href}?mode=${mode}&lang=${locale}`}
                   prefetch={false}
                   aria-current={active ? "page" : undefined}
                   onClick={() => setMenuOpen(false)}
@@ -305,6 +314,9 @@ export function Topbar() {
 }
 
 function BankTopbar({ pathname }: { pathname: string }) {
+  const { locale, t } = useT();
+  const tabs = getTabs(t);
+  const modeOptions = getModeOptions(t);
   const { mode, setMode, senderId, cosignerId } = useDemoMode();
   const { events, lastEvent, syncVersion, resyncVersion } = useEventStream({ userId: senderId });
   const { devices, loading: devicesLoading } = useLocalDevices();
@@ -325,10 +337,13 @@ function BankTopbar({ pathname }: { pathname: string }) {
     return () => controller.abort();
   }, [devices, senderId, resetEvent, syncVersion, resyncVersion]);
 
+  // Kazakh labels run longer: switch to the full captions only on very wide screens.
+  const shortLabel = locale === "kk" ? "whitespace-nowrap min-[1800px]:hidden" : "whitespace-nowrap min-[1400px]:hidden";
+  const longLabel = locale === "kk" ? "hidden whitespace-nowrap min-[1800px]:inline" : "hidden whitespace-nowrap min-[1400px]:inline";
   return (
     <header className="sticky top-0 z-40 border-b border-border-default bg-surface/90 backdrop-blur-md">
       <div className="shell-container flex min-h-[var(--topbar-height)] flex-wrap items-center gap-x-2.5 gap-y-2 py-2 xl:h-16 xl:flex-nowrap xl:justify-between xl:py-0 min-[1400px]:gap-x-4">
-        <Link href={`/?mode=${mode}`} className="inline-flex shrink-0 items-center gap-2 rounded-xl py-1 font-extrabold tracking-tight text-ink-primary transition-colors hover:text-bcc">
+        <Link href={`/?mode=${mode}&lang=${locale}`} className="inline-flex shrink-0 items-center gap-2 rounded-xl py-1 font-extrabold tracking-tight text-ink-primary transition-colors hover:text-bcc">
           <span className="grid size-9 place-items-center rounded-xl border border-bcc/40 bg-bcc/10 text-bcc">
             <ShieldCheck aria-hidden="true" className="size-5" />
           </span>
@@ -336,23 +351,23 @@ function BankTopbar({ pathname }: { pathname: string }) {
         </Link>
 
         <SegmentedControl
-          label="Режим демо"
+          label={t("topbar.mode")}
           options={modeOptions}
           value={mode}
           onChange={setMode}
           className="order-3 w-full sm:order-none sm:w-auto [&_button]:px-2.5 [&_button]:py-1.5 min-[1400px]:[&_button]:px-3.5"
         />
 
-        <nav aria-label="Разделы SafeSign" className="order-4 flex w-full flex-wrap items-center gap-1 xl:order-none xl:w-auto xl:flex-nowrap">
+        <nav aria-label={t("topbar.sections")} className="order-4 flex w-full flex-wrap items-center gap-1 xl:order-none xl:w-auto xl:flex-nowrap">
           {tabs.map(tab => {
             const active = pathname === tab.href || (tab.href !== "/" && pathname.startsWith(`${tab.href}/`));
             const count = tab.href === "/cosign" ? pendingCount : 0;
             return (
-              <Link key={tab.href} href={`${tab.href}?mode=${mode}`} prefetch={false} aria-current={active ? "page" : undefined}
+              <Link key={tab.href} href={`${tab.href}?mode=${mode}&lang=${locale}`} prefetch={false} aria-current={active ? "page" : undefined}
                 className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-2 text-[13px] font-semibold transition-colors
                   ${active ? "bg-elevated text-bcc" : "text-ink-secondary hover:bg-surface-hover hover:text-ink-primary"}`}>
                 {tab.label}
-                {count > 0 && <span aria-label={`Ожидают подписи: ${count}`}
+                {count > 0 && <span aria-label={t("topbar.pendingCount", { count })}
                   className="rounded-full bg-danger-solid px-1.5 font-mono text-xs tabular-nums text-white motion-safe:animate-pulse">{count}</span>}
               </Link>
             );
@@ -360,11 +375,12 @@ function BankTopbar({ pathname }: { pathname: string }) {
         </nav>
 
         <div className="ml-auto flex flex-wrap items-center gap-2 xl:ml-0 xl:flex-nowrap">
+          <LocaleSwitch />
           {device ? (
             <button
               type="button"
               onClick={() => setOpen("device")}
-              aria-label={`Настройки устройства ${device.deviceName}`}
+              aria-label={t("topbar.deviceSettings", { deviceName: device.deviceName })}
               title={device.deviceName}
               className="rounded-full transition duration-150 hover:brightness-110 motion-safe:active:scale-[0.98]"
             >
@@ -376,22 +392,24 @@ function BankTopbar({ pathname }: { pathname: string }) {
             <Button
               size="sm"
               variant="secondary"
-              aria-label="Привязать устройство за 5 сек"
+              aria-label={t("common.enrollQuick")}
               icon={<Zap className="size-4 text-gold motion-safe:animate-pulse" />}
               onClick={() => setOpen("device")}
               disabled={devicesLoading}
             >
-              Привязать устройство<span className="hidden min-[1400px]:inline"> за 5 сек</span>
+              <span className={shortLabel}>{t("common.enroll")}</span>
+              <span className={longLabel}>{t("common.enrollQuick")}</span>
             </Button>
           )}
           <Button
             variant="ghost"
             size="sm"
-            aria-label="Сбросить демо"
+            aria-label={t("topbar.reset")}
             icon={<RotateCcw className="size-4" />}
             onClick={() => setOpen("reset")}
           >
-            Сбросить<span className="hidden min-[1400px]:inline"> демо</span>
+            <span className={shortLabel}>{t("common.reset")}</span>
+            <span className={longLabel}>{t("topbar.reset")}</span>
           </Button>
         </div>
       </div>

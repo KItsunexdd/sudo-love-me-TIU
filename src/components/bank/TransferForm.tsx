@@ -1,5 +1,7 @@
 "use client";
 
+import type { Translate } from "@/lib/i18n";
+import { useT } from "@/components/shell/LocaleProvider";
 import { Fingerprint, KeyRound, PhoneIncoming, UserRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button, ErrorCard, SegmentedControl, Skeleton, Toggle } from "@/components/ui";
@@ -12,11 +14,11 @@ import { RiskMeter } from "./RiskMeter";
 
 type Presets = DemoUsersResponse["recipientPresets"];
 export type PresetName = keyof Presets | "office";
-const productOptions = [
-  { value: "P2P_TRANSFER", label: "Перевод" },
-  { value: "DEPOSIT_CLOSE", label: "Закрыть депозит" },
-  { value: "ONLINE_LOAN", label: "Онлайн-кредит" },
-] as const;
+const getProductOptions = (t: Translate) => ([
+  { value: "P2P_TRANSFER", label: t("common.transfer") },
+  { value: "DEPOSIT_CLOSE", label: t("transferForm.closeDeposit") },
+  { value: "ONLINE_LOAN", label: t("common.loan") },
+] as const);
 
 function presetValues(name: PresetName, presets: Presets) {
   const recipient = name === "office" ? { ...presets.supplier, amountTenge: 120000 } : presets[name];
@@ -25,8 +27,9 @@ function presetValues(name: PresetName, presets: Presets) {
 }
 
 function RiskMeterSkeleton() {
+  const { t } = useT();
   return (
-    <div aria-busy="true" aria-label="Оцениваем риск" className="space-y-2.5">
+    <div aria-busy="true" aria-label={t("transferForm.assessing")} className="space-y-2.5">
       <div className="flex items-center justify-between gap-2">
         <Skeleton className="h-4 w-36" />
         <Skeleton className="h-6 w-28 rounded-full" />
@@ -41,6 +44,8 @@ export function TransferForm({ mode, sender, presets, initialPreset, device, dev
   mode: Mode; sender: User; presets: Presets; initialPreset: PresetName; device?: LocalDevice; deviceLoading: boolean;
   busy: boolean; cooling: boolean; onRegister: () => void; onPrepare: (input: PrepareInput) => void;
 }) {
+  const { t } = useT();
+  const productOptions = getProductOptions(t);
   const business = mode === "B2B";
   const [form, setForm] = useState(() => presetValues(initialPreset, presets));
   const [operation, setOperation] = useState<OperationType>(business ? "B2B_INVOICE" : "P2P_TRANSFER");
@@ -99,10 +104,10 @@ export function TransferForm({ mode, sender, presets, initialPreset, device, dev
     <form onSubmit={event => { event.preventDefault(); if (valid && device && !busy && !cooling) onPrepare({ ...riskInput, recipientName, purpose }); }}>
       <fieldset disabled={busy} className="min-w-0 space-y-2.5 2xl:space-y-3">
         {business ? (
-          <h2 className="type-h2">Оплата счёта</h2>
+          <h2 className="type-h2">{t("common.invoice")}</h2>
         ) : (
           <SegmentedControl
-            label="Тип операции"
+            label={t("common.type")}
             value={operation}
             onChange={chooseOperation}
             options={productOptions}
@@ -118,7 +123,7 @@ export function TransferForm({ mode, sender, presets, initialPreset, device, dev
             icon={<UserRound size={15} />}
             onClick={() => applyPreset(business ? "office" : "son")}
           >
-            {business ? `Офис · ${formatTenge(120_000)}` : `Сыну · ${formatTenge(presets.son.amountTenge)}`}
+            {business ? t("transferForm.office", { value: formatTenge(120_000) }) : t("transferForm.son", { value: formatTenge(presets.son.amountTenge) })}
           </Button>
           <Button
             size="sm"
@@ -129,13 +134,13 @@ export function TransferForm({ mode, sender, presets, initialPreset, device, dev
           >
             {business
               ? `СнабТехСервис · ${formatTenge(presets.supplier.amountTenge)}`
-              : `«Нацбанк» · ${formatTenge(presets.unknown.amountTenge)}`}
+              : t("transferForm.nationalBank", { value: formatTenge(presets.unknown.amountTenge) })}
           </Button>
         </div>
 
         <div className="grid gap-x-2.5 gap-y-2 sm:grid-cols-2">
           <label className="type-label text-ink-secondary">
-            Получатель
+            {t("common.recipient")}
             <input
               className={fieldClass}
               value={recipientName}
@@ -146,7 +151,7 @@ export function TransferForm({ mode, sender, presets, initialPreset, device, dev
             />
           </label>
           <label className="type-label text-ink-secondary">
-            IBAN, карта или телефон
+            {t("transferForm.iban")}
             <input
               className={`${fieldClass} font-mono tabular-nums`}
               value={recipientAccount}
@@ -157,7 +162,7 @@ export function TransferForm({ mode, sender, presets, initialPreset, device, dev
             />
           </label>
           <label className="type-label text-ink-secondary">
-            Сумма, ₸
+            {t("transferForm.amount")}
             <input
               className={`${fieldClass} font-mono tabular-nums`}
               inputMode="numeric"
@@ -168,7 +173,7 @@ export function TransferForm({ mode, sender, presets, initialPreset, device, dev
             />
           </label>
           <label className="type-label text-ink-secondary">
-            Назначение
+            {t("common.purpose")}
             <input
               className={fieldClass}
               value={purpose}
@@ -179,8 +184,8 @@ export function TransferForm({ mode, sender, presets, initialPreset, device, dev
         </div>
 
         <div className="grid gap-2 py-0.5 sm:grid-cols-[1.45fr_1fr]">
-          <Toggle label="Звонок с неизвестного номера" checked={call} onChange={value => setForm({ ...form, call: value })} />
-          <Toggle label="Ночное время" checked={night} onChange={value => setForm({ ...form, night: value })} />
+          <Toggle label={t("transferForm.call")} checked={call} onChange={value => setForm({ ...form, call: value })} />
+          <Toggle label={t("transferForm.night")} checked={night} onChange={value => setForm({ ...form, night: value })} />
         </div>
 
         <div aria-live="polite" className="min-h-[96px] rounded-xl border border-border-default bg-surface p-3">
@@ -191,7 +196,7 @@ export function TransferForm({ mode, sender, presets, initialPreset, device, dev
           ) : valid ? (
             <RiskMeterSkeleton />
           ) : (
-            <p className="text-sm text-ink-secondary">Чтобы оценить риск, укажите счёт и целую положительную сумму.</p>
+            <p className="text-sm text-ink-secondary">{t("transferForm.invalid")}</p>
           )}
         </div>
 
@@ -205,25 +210,25 @@ export function TransferForm({ mode, sender, presets, initialPreset, device, dev
             disabled={cooling || !current?.risk || !recipientName.trim()}
           >
             <span>
-              Подписать без SMS
+              {t("transferForm.sign")}
               <span className="block text-xs font-medium opacity-85">Passkey + ML-DSA-65</span>
             </span>
           </Button>
         ) : (
           <Button size="lg" className="w-full" icon={<KeyRound size={19} />} disabled={deviceLoading} onClick={onRegister}>
-            Привязать устройство за 5 сек
+            {t("common.enrollQuick")}
           </Button>
         )}
 
         {armed && (
           <p className="text-center text-xs font-medium text-danger-text">
-            ⚡ В Панели хакера активен MITM-перехватчик (подмена произойдёт после вашей подписи)
+            {t("transferForm.armed")}
           </p>
         )}
 
         {device?.deviceKind === "SOFTWARE_FALLBACK" && (
           <p className="text-center font-mono text-xs text-amber-300">
-            Режим: WebCrypto ECDSA + ML-DSA-65 (Software Fallback)
+            {t("transferForm.fallback")}
           </p>
         )}
       </fieldset>

@@ -1,5 +1,7 @@
 "use client";
 
+import { failureText } from "@/lib/i18n/server-text";
+import { useT } from "@/components/shell/LocaleProvider";
 import { motion, useReducedMotion } from "framer-motion";
 import { Microscope, RotateCcw, ShieldAlert } from "lucide-react";
 import type { ApiError } from "@/lib/client/api";
@@ -32,6 +34,7 @@ function pickTamperHeadline(diff?: TamperDiff): { original: string; tampered: st
 export function AttackBlockedShield({ error, httpStatus, durationMs, onInspect, onReset }: {
   error: ApiError; httpStatus: number; durationMs?: number; onInspect?: () => void; onReset?: () => void;
 }) {
+  const { locale, t } = useT();
   const reduce = useReducedMotion();
   const trace = error.verificationTrace ?? [];
   const failed = trace.filter(row => row.outcome === "FAIL");
@@ -54,23 +57,23 @@ export function AttackBlockedShield({ error, httpStatus, durationMs, onInspect, 
           <ShieldAlert aria-hidden="true" className="relative size-7" />
         </span>
         <div className="min-w-0 space-y-1.5">
-          <h2 className="text-xl font-extrabold tracking-tight text-ink-primary sm:text-[22px]">АТАКА ОТРАЖЕНА</h2>
+          <h2 className="text-xl font-extrabold tracking-tight text-ink-primary sm:text-[22px]">{t("attackBlockedShield.repelled")}</h2>
           <Badge tone="danger" className="max-w-full !whitespace-normal break-all font-mono text-[13px] font-bold tabular-nums">
             HTTP {httpStatus} • {error.failureCode}
           </Badge>
         </div>
       </div>
 
-      <p className="text-sm leading-relaxed text-ink-secondary">{error.message}</p>
+      <p className="text-sm leading-relaxed text-ink-secondary">{failureText(locale, error.failureCode, error.message)}</p>
 
       {headline && (
         <div className="rounded-xl border border-danger/45 bg-terminal/90 px-3.5 py-2.5 text-sm leading-snug">
-          <span className="text-ink-secondary">Клиент подписал: </span>
+          <span className="text-ink-secondary">{t("attackBlockedShield.signed")} </span>
           <strong className={`${headline.mono ? "font-mono" : ""} font-bold tabular-nums text-bcc`}>
             {escapeDisplayControls(headline.original)}
           </strong>
           <span className="mx-1.5 text-ink-muted">·</span>
-          <span className="text-ink-secondary">Сервер получил: </span>
+          <span className="text-ink-secondary">{t("attackBlockedShield.received")} </span>
           <strong className={`${headline.mono ? "font-mono" : ""} font-bold tabular-nums text-danger-text`}>
             {escapeDisplayControls(headline.tampered)}
           </strong>
@@ -81,18 +84,18 @@ export function AttackBlockedShield({ error, httpStatus, durationMs, onInspect, 
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium text-ink-secondary sm:text-sm">
         {computedMs !== undefined && (
-          <span>Остановлено за <span className="mono-data font-bold text-ink-primary">{formatMs(computedMs)}</span></span>
+          <span>{t("attackBlockedShield.elapsed")} <span className="mono-data font-bold text-ink-primary">{formatMs(computedMs)}</span></span>
         )}
         {failed.length > 0 && (
-          <span>· Отклонены шаги <span className="font-mono font-semibold tabular-nums text-danger-text">{failed.map(row => `№${row.step}`).join(", ")}</span></span>
+          <span>{t("attackBlockedShield.failedSteps")} <span className="font-mono font-semibold tabular-nums text-danger-text">{failed.map(row => `№${row.step}`).join(", ")}</span></span>
         )}
-        <span>· Событие записано в SOC</span>
+        <span>{t("attackBlockedShield.logged")}</span>
       </div>
 
       {(onInspect || onReset) && (
         <div className="flex flex-wrap gap-2 pt-0.5">
-          {onInspect && <Button size="sm" variant="secondary" icon={<Microscope className="size-4" />} onClick={onInspect}>Открыть Crypto Inspector</Button>}
-          {onReset && <Button size="sm" variant="ghost" icon={<RotateCcw className="size-4" />} onClick={onReset}>Сбросить</Button>}
+          {onInspect && <Button size="sm" variant="secondary" icon={<Microscope className="size-4" />} onClick={onInspect}>{t("common.inspect")}</Button>}
+          {onReset && <Button size="sm" variant="ghost" icon={<RotateCcw className="size-4" />} onClick={onReset}>{t("common.reset")}</Button>}
         </div>
       )}
     </motion.section>

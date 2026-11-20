@@ -1,5 +1,7 @@
 "use client";
 
+import { russian } from "@/lib/i18n";
+import { useT } from "@/components/shell/LocaleProvider";
 import { motion, useReducedMotion } from "framer-motion";
 import { Atom, LockKeyholeOpen, ShieldCheck } from "lucide-react";
 import { useRef, useState } from "react";
@@ -14,6 +16,7 @@ export function QuantumCompareModal({ sample, deviceId, onClose, onInspect, onRe
   sample: PrepareInput; deviceId?: string; onClose: () => void; onInspect: (id: string) => void;
   onResult: (id: string, result: ApiResult<ExecuteResponse>) => void;
 }) {
+  const { t } = useT();
   const [busy, setBusy] = useState(false);
   const submitting = useRef(false);
   const [error, setError] = useState<ApiError>();
@@ -45,7 +48,7 @@ export function QuantumCompareModal({ sample, deviceId, onClose, onInspect, onRe
           pqSignatureBase64: toBase64(signature), clientTimings });
         onResult(txId, result);
         setHttp(result.status);
-        setError(result.ok ? { status: result.data.status, failureCode: "ERR_UNEXPECTED_RESULT", message: "Сервер принял диагностический запрос. Проверьте транзакцию." } : result.error);
+        setError(result.ok ? { status: result.data.status, failureCode: "ERR_UNEXPECTED_RESULT", message: russian("quantumCompareModal.unexpected") } : result.error);
       } finally {
         disposable.secretKey.fill(0);
       }
@@ -60,12 +63,12 @@ export function QuantumCompareModal({ sample, deviceId, onClose, onInspect, onRe
   const verifiedBlocked = error?.failureCode === "ERR_PQ_SIGNATURE_INVALID";
 
   return (
-    <Modal open onClose={onClose} dismissible={!busy} title="Квантовая атака (алгоритм Шора)" wide
-      description="Что произойдёт при компрометации классического ключа ECDSA P-256?"
+    <Modal open onClose={onClose} dismissible={!busy} title={t("quantumCompareModal.quantum")} wide
+      description={t("quantumCompareModal.compromisedHint")}
       footer={
         <div className="flex flex-wrap justify-end gap-2">
-          {id && <Button variant="secondary" onClick={() => onInspect(id)} disabled={busy}>Открыть Crypto Inspector</Button>}
-          <Button loading={busy} disabled={!deviceId} onClick={() => void check()}>Проверить защиту ML-DSA-65</Button>
+          {id && <Button variant="secondary" onClick={() => onInspect(id)} disabled={busy}>{t("common.inspect")}</Button>}
+          <Button loading={busy} disabled={!deviceId} onClick={() => void check()}>{t("quantumCompareModal.verify")}</Button>
         </div>
       }
     >
@@ -78,12 +81,12 @@ export function QuantumCompareModal({ sample, deviceId, onClose, onInspect, onRe
             <div className="flex items-center justify-between gap-2">
               <LockKeyholeOpen aria-hidden="true" className={verifiedBlocked ? "text-danger-text" : "text-gold"} />
               <Badge tone={verifiedBlocked ? "danger" : "warning"}>
-                {verifiedBlocked ? "Скомпрометирован" : "ECDSA P-256"}
+                {verifiedBlocked ? t("quantumCompareModal.compromised") : "ECDSA P-256"}
               </Badge>
             </div>
-            <h3 className="type-h3">Классический слой</h3>
+            <h3 className="type-h3">{t("quantumCompareModal.classic")}</h3>
             <p className="text-sm text-ink-secondary">
-              В сценарии Шора считаем классический ключ ECDSA взломанным. Вы подтверждаете тест своим устройством.
+              {t("quantumCompareModal.scenario")}
             </p>
           </Card>
         </motion.div>
@@ -99,22 +102,22 @@ export function QuantumCompareModal({ sample, deviceId, onClose, onInspect, onRe
             <div className="flex items-center justify-between gap-2">
               {verifiedBlocked ? <ShieldCheck aria-hidden="true" className="text-quantum" /> : <Atom aria-hidden="true" className="text-quantum" />}
               <Badge tone="info" className="font-mono tabular-nums">
-                {verifiedBlocked ? "Удар отражён" : "FIPS 204 · 3 309 Б"}
+                {verifiedBlocked ? t("quantumCompareModal.repelled") : t("quantumCompareModal.size")}
               </Badge>
             </div>
-            <h3 className="type-h3">Постквантовый слой ML-DSA-65</h3>
+            <h3 className="type-h3">{t("quantumCompareModal.pq")}</h3>
             <p className="text-sm text-ink-secondary">
-              Сервер проверяет подпись на решётках по открытому ключу устройства и отклоняет поддельный PQ-ключ.
+              {t("quantumCompareModal.serverCheck")}
             </p>
           </Card>
         </motion.div>
       </div>
 
       <p className="my-4 rounded-xl border border-border-default bg-terminal px-3.5 py-2.5 text-sm text-ink-secondary">
-        Диагностическая операция без списания · <span className="font-mono font-semibold tabular-nums text-ink-primary">{formatTenge(sample.amountTenge)}</span> · {sample.recipientName} · <span className="mono-data text-ink-primary">{formatIban(sample.recipientAccount)}</span>
+        {t("quantumCompareModal.diagnostic")} <span className="font-mono font-semibold tabular-nums text-ink-primary">{formatTenge(sample.amountTenge)}</span> · {sample.recipientName} · <span className="mono-data text-ink-primary">{formatIban(sample.recipientAccount)}</span>
       </p>
 
-      {!deviceId && <p className="text-sm text-amber-300">Сначала привяжите устройство на демо-стенде.</p>}
+      {!deviceId && <p className="text-sm text-amber-300">{t("quantumCompareModal.enroll")}</p>}
 
       {error && (
         <div className="space-y-3">

@@ -1,3 +1,6 @@
+"use client";
+
+import { useT } from "@/components/shell/LocaleProvider";
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { LoaderCircle } from "lucide-react";
 
@@ -28,13 +31,14 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   { variant = "primary", size = "md", loading = false, icon, type = "button", disabled, className = "", children, ...props },
   ref,
 ) {
+  const { t } = useT();
   return (
     <button {...props} ref={ref} type={type} disabled={disabled || loading} aria-busy={loading || undefined}
       className={`relative inline-flex items-center justify-center text-center font-semibold transition duration-150 motion-safe:active:scale-[.985] disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none ${variants[variant]} ${sizes[size]} ${className}`}>
       {icon && <span aria-hidden="true" className={`inline-flex shrink-0 ${loading ? "invisible" : ""}`}>{icon}</span>}
       {loading && <LoaderCircle aria-hidden="true" className={`absolute size-4 motion-safe:animate-spin ${icon ? "left-3" : "left-1/2 -translate-x-1/2"}`} />}
       <span className={loading && !icon ? "invisible" : undefined}>{children}</span>
-      {loading && <span className="sr-only">Выполняется…</span>}
+      {loading && <span className="sr-only">{t("common.busy")}</span>}
     </button>
   );
 });

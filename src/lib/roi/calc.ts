@@ -1,3 +1,4 @@
+import { russian, t, type Locale, type Translate } from "@/lib/i18n";
 import { formatTenge } from "@/lib/ui/format";
 
 export interface RoiInputs {
@@ -66,11 +67,11 @@ export const ROI_DEFAULTS: RoiInputs = {
   fraudPreventionPercent: 70,
 };
 
-export const ROI_PRESETS: readonly RoiPreset[] = [
+export const getRoiPresets = (t: Translate): readonly RoiPreset[] => ([
   {
     id: "conservative",
-    label: "Консервативный",
-    shortNote: "1,5 млн MAU · 5 SMS · 8 ₸ · 50% переход",
+    label: t("calc.conservative"),
+    shortNote: t("calc.conservativeNote"),
     inputs: {
       activeUsers: 1_500_000,
       smsPerUserMonth: 5,
@@ -82,14 +83,14 @@ export const ROI_PRESETS: readonly RoiPreset[] = [
   },
   {
     id: "base",
-    label: "Базовый (ТЗ)",
-    shortNote: "3 млн клиентов · 7 SMS · 12 ₸ · 75% переход",
+    label: t("calc.base"),
+    shortNote: t("calc.baseNote"),
     inputs: ROI_DEFAULTS,
   },
   {
     id: "optimistic",
-    label: "Оптимистичный",
-    shortNote: "3 млн клиентов · 8 SMS · 15 ₸ · 95% переход",
+    label: t("calc.optimistic"),
+    shortNote: t("calc.optimisticNote"),
     inputs: {
       activeUsers: 3_000_000,
       smsPerUserMonth: 8,
@@ -99,7 +100,8 @@ export const ROI_PRESETS: readonly RoiPreset[] = [
       fraudPreventionPercent: 85,
     },
   },
-] as const;
+] as const);
+export const ROI_PRESETS = getRoiPresets(russian);
 
 export const ROI_RANGES = {
   activeUsers: { min: 100_000, max: 5_000_000, step: 100_000 },
@@ -133,7 +135,7 @@ export function sanitizeRoiInputs(raw: Partial<RoiInputs>): RoiInputs {
  *   yearlyFraudSavings = F * (R / 100)
  *   totalYearlyImpact = yearlySmsSavings + yearlyFraudSavings
  */
-export function calcRoi(rawInputs: Partial<RoiInputs> = ROI_DEFAULTS): RoiResult {
+export function calcRoi(rawInputs: Partial<RoiInputs> = ROI_DEFAULTS, t: Translate = russian): RoiResult {
   const inputs = sanitizeRoiInputs(rawInputs);
   const { activeUsers: U, smsPerUserMonth: N, smsCostTenge: P, migrationPercent: M, annualFraudLossTenge: F, fraudPreventionPercent: R } = inputs;
 
@@ -160,8 +162,8 @@ export function calcRoi(rawInputs: Partial<RoiInputs> = ROI_DEFAULTS): RoiResult
     const fraudCumulative = (yearlyFraudSavings * month) / 12;
     return {
       month,
-      label: `Месяц ${month}`,
-      shortLabel: `М${month}`,
+      label: t("calc.month", { month }),
+      shortLabel: t("calc.monthShort", { month }),
       smsCumulative,
       fraudCumulative,
       totalCumulative: smsCumulative + fraudCumulative,
@@ -227,7 +229,7 @@ export function formatCompactTenge(amount: number): string {
   return formatTenge(Math.round(amount));
 }
 
-export function formatCompactCount(count: number): string {
+export function formatCompactCount(count: number, locale: Locale = "ru"): string {
   if (!Number.isFinite(count)) return "—";
   const abs = Math.abs(count);
   if (abs >= 1_000_000_000) {
@@ -237,7 +239,7 @@ export function formatCompactCount(count: number): string {
     return `${normalizeParts(millionFormat, count / 1_000_000)}${NBSP}млн`;
   }
   if (abs >= 1_000) {
-    return `${normalizeParts(millionFormat, count / 1_000)}${NBSP}тыс.`;
+    return `${normalizeParts(millionFormat, count / 1_000)}${NBSP}${t(locale, "roi.thousand")}`;
   }
   return normalizeParts(millionFormat, Math.round(count));
 }

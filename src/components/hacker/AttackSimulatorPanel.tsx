@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/components/shell/LocaleProvider";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowLeftRight, Atom, ChevronRight, ExternalLink, GlobeLock, PhoneIncoming, Repeat2, ScanLine, Terminal, type LucideIcon } from "lucide-react";
 import { Button, Card, EmptyState, ErrorCard, JsonDiffViewer, SegmentedControl, Toggle } from "@/components/ui";
@@ -39,6 +40,7 @@ export function AttackSimulatorPanel({ tx, error, device, sample, onResult, onSo
   onResult: (txId: string, result: ApiResult<ExecuteResponse>) => void;
   onSocial: () => void; onQuantum: () => void; onInspect: (id: string) => void; business: boolean;
 }) {
+  const { locale, t } = useT();
   const [tab, setTab] = useState<"steps" | "json">("steps");
   const [cloneUrl, setCloneUrl] = useState("");
   const [foreignOrigin, setForeignOrigin] = useState("");
@@ -78,82 +80,82 @@ export function AttackSimulatorPanel({ tx, error, device, sample, onResult, onSo
     <div className="space-y-2.5 2xl:space-y-3">
       {armed && (
         <p role="status" className="rounded-xl border border-danger/55 bg-danger/[.12] px-3.5 py-2 text-[13px] font-medium text-danger-text">
-          ⚡ Перехватчик взведён — нажмите «Подписать без SMS» слева. Клиент подпишет исходные реквизиты, а на сервер уйдёт подменённый пакет.
+          {t("attackSimulatorPanel.armed")}
         </p>
       )}
       <div className="grid gap-2.5 sm:grid-cols-2 2xl:gap-3">
         <Scenario
           icon={ArrowLeftRight}
           tone="bg-danger/15 text-danger-text"
-          title="MITM · Подмена суммы"
+          title={t("attackSimulatorPanel.amount")}
           active={armed === "MITM_AMOUNT"}
-          detail={<>После подписи меняет <code className="font-mono text-ink-primary">amountTenge</code> на <span className="font-mono tabular-nums text-ink-primary">{mitmAmountLabel}</span>.</>}
+          detail={<>{t("attackSimulatorPanel.after")} <code className="font-mono text-ink-primary">amountTenge</code> {t("attackSimulatorPanel.replace")} <span className="font-mono tabular-nums text-ink-primary">{mitmAmountLabel}</span>.</>}
         >
-          <Toggle variant="attack" checked={armed === "MITM_AMOUNT"} onChange={on => armInterceptor(on ? "MITM_AMOUNT" : null)} label={`Сумма → ${mitmAmountLabel}`} />
+          <Toggle variant="attack" checked={armed === "MITM_AMOUNT"} onChange={on => armInterceptor(on ? "MITM_AMOUNT" : null)} label={t("attackSimulatorPanel.amountToggle", { mitmAmountLabel })} />
         </Scenario>
         <Scenario
           icon={ScanLine}
           tone="bg-danger/15 text-danger-text"
-          title="MITM · Подмена IBAN"
+          title={t("attackSimulatorPanel.iban")}
           active={armed === "MITM_RECIPIENT"}
-          detail={<>После подписи подменяет получателя на дроппера <code className="font-mono text-ink-primary">KZ99…DROP</code>.</>}
+          detail={<>{t("attackSimulatorPanel.redirect")} <code className="font-mono text-ink-primary">KZ99…DROP</code>.</>}
         >
-          <Toggle variant="attack" checked={armed === "MITM_RECIPIENT"} onChange={on => armInterceptor(on ? "MITM_RECIPIENT" : null)} label="Получатель → дроппер" />
+          <Toggle variant="attack" checked={armed === "MITM_RECIPIENT"} onChange={on => armInterceptor(on ? "MITM_RECIPIENT" : null)} label={t("attackSimulatorPanel.recipient")} />
         </Scenario>
         <Scenario
           icon={Repeat2}
           tone="bg-gold/15 text-gold"
-          title="Replay · Повтор пакета"
+          title={t("attackSimulatorPanel.replay")}
           detail={lastValid
-            ? <>Перехвачен пакет <code className="font-mono text-ink-primary">{shortHash(lastValidTxId ?? "", 5)}</code> — повторная отправка байт-в-байт.</>
-            : "Сначала выполните обычный перевод слева — перехватчик сохранит пакет."}
+            ? <>{t("attackSimulatorPanel.captured")} <code className="font-mono text-ink-primary">{shortHash(lastValidTxId ?? "", 5)}</code> {t("attackSimulatorPanel.resend")}</>
+            : t("attackSimulatorPanel.firstTransfer")}
         >
           <Button size="sm" variant="secondary" loading={running === "replay"} disabled={!lastValid || running !== null} onClick={() => void run("replay")}>
-            Повторить пакет
+            {t("attackSimulatorPanel.repeat")}
           </Button>
         </Scenario>
         <Scenario
           icon={GlobeLock}
           tone="bg-quantum/15 text-quantum"
-          title="Фишинг · Чужой домен"
+          title={t("attackSimulatorPanel.phishing")}
           detail={softwareKey
-            ? "Откройте клон B+ Bonus или отправьте подпись от имени чужого домена."
-            : "Откройте клон B+ Bonus. Для API-теста Origin привяжите Software Key."}
+            ? t("attackSimulatorPanel.originHint")
+            : t("attackSimulatorPanel.softwareHint")}
         >
           <div className="flex flex-wrap gap-2">
             {cloneUrl && (
               <a
                 className="inline-flex min-h-9 items-center gap-1.5 rounded-[10px] border border-border-strong bg-elevated px-3 py-1.5 text-[13px] font-semibold text-ink-primary transition duration-150 hover:border-bcc/50 hover:bg-surface-hover motion-safe:active:scale-[.985]"
-                href={cloneUrl}
+                href={`${cloneUrl}?lang=${locale}`}
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                Сайт-клон <ExternalLink aria-hidden="true" size={14} />
+                {t("attackSimulatorPanel.clone")} <ExternalLink aria-hidden="true" size={14} />
               </a>
             )}
             <Button size="sm" variant="secondary" loading={running === "origin"} disabled={!softwareKey || running !== null} onClick={() => void run("origin")}>
-              Чужой Origin
+              {t("attackSimulatorPanel.origin")}
             </Button>
           </div>
         </Scenario>
         <Scenario
           icon={PhoneIncoming}
           tone="bg-gold/15 text-gold"
-          title={business ? "Двойной контроль" : "Социальная инженерия"}
-          detail={business ? "Платёж поставщику от 500 000 ₸ потребует подписи директора." : "Звонок из «Нацбанка» и перевод на новый счёт дроппера."}
+          title={business ? t("attackSimulatorPanel.dual") : t("attackSimulatorPanel.social")}
+          detail={business ? t("attackSimulatorPanel.director") : t("attackSimulatorPanel.call")}
         >
           <Button size="sm" variant="secondary" onClick={onSocial}>
-            {business ? "Подготовить счёт" : "Симулировать звонок"}
+            {business ? t("attackSimulatorPanel.invoice") : t("attackSimulatorPanel.simulateCall")}
           </Button>
         </Scenario>
         <Scenario
           icon={Atom}
           tone="bg-quantum/15 text-quantum"
-          title="Квантовая атака"
-          detail="Проверка стойкости ML-DSA-65 (FIPS 204) при взломе ECDSA."
+          title={t("attackSimulatorPanel.quantum")}
+          detail={t("attackSimulatorPanel.resilience")}
         >
           <Button size="sm" variant="secondary" onClick={onQuantum}>
-            Сравнить криптослои
+            {t("attackSimulatorPanel.compare")}
           </Button>
         </Scenario>
       </div>
@@ -164,7 +166,7 @@ export function AttackSimulatorPanel({ tx, error, device, sample, onResult, onSo
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="flex items-center gap-2 text-base font-semibold 2xl:type-h2">
             <Terminal aria-hidden="true" size={18} className="text-bcc" />
-            Проверка операции
+            {t("attackSimulatorPanel.verify")}
           </h2>
           <div className="flex items-center gap-2">
             {tx && (
@@ -173,21 +175,21 @@ export function AttackSimulatorPanel({ tx, error, device, sample, onResult, onSo
               </Button>
             )}
             <SegmentedControl
-              label="Разбор операции"
+              label={t("attackSimulatorPanel.analysis")}
               value={tab}
               onChange={setTab}
               className="[&_button]:px-2.5 [&_button]:py-1.5"
-              options={[{ value: "steps", label: "7 шагов" }, { value: "json", label: "JSON / Diff" }]}
+              options={[{ value: "steps", label: t("attackSimulatorPanel.steps") }, { value: "json", label: "JSON / Diff" }]}
             />
           </div>
         </div>
 
         {!tx && !trace?.length ? (
           <EmptyState
-            title="Ожидание криптопакета"
+            title={t("attackSimulatorPanel.waiting")}
             icon={Terminal}
             className="py-4 2xl:py-6"
-            description="Включите MITM-перехватчик выше или подпишите перевод слева, чтобы увидеть 7-шаговый разбор сервера."
+            description={t("attackSimulatorPanel.waitingHint")}
           />
         ) : tab === "steps" ? (
           <VerificationStepsList compact trace={trace} failureCode={error?.failureCode ?? tx?.failureCode} />
@@ -197,10 +199,10 @@ export function AttackSimulatorPanel({ tx, error, device, sample, onResult, onSo
           <JsonDiffViewer tamperDiff={error.tamperDiff} />
         ) : (
           <EmptyState
-            title="JSON-пакет недоступен"
+            title={t("attackSimulatorPanel.missing")}
             icon={Terminal}
             className="py-4"
-            description="Откройте вкладку «7 шагов», чтобы посмотреть серверный лог проверки."
+            description={t("attackSimulatorPanel.log")}
           />
         )}
       </Card>
