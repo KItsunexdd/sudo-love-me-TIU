@@ -349,7 +349,7 @@ function BankTopbar({ pathname }: { pathname: string }) {
           options={modeOptions}
           value={mode}
           onChange={setMode}
-          className="order-3 w-full sm:order-none sm:w-auto [&_button]:px-2.5 min-[1400px]:[&_button]:px-3"
+          className="order-3 w-full sm:order-none sm:w-auto [&_button]:px-2 min-[1400px]:[&_button]:px-3"
         />
 
         <nav aria-label={t("topbar.sections")} className="order-4 flex w-full flex-wrap items-center gap-0.5 xl:order-none xl:mr-auto xl:w-auto xl:flex-nowrap">

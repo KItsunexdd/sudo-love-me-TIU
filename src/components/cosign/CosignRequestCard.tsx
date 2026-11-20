@@ -82,7 +82,7 @@ export function CosignRequestCard({
       exit="exit"
     >
       <Card className={`space-y-4 ${corporate ? "border-gold/40" : "border-danger/45"}`}>
-        <div className={`flex items-start gap-3 rounded-lg px-3 py-2.5 ${corporate ? "bg-gold/[.10]" : "bg-danger/[.10]"}`}>
+        <div className={`flex items-start gap-3 rounded-lg px-3 py-3 ${corporate ? "bg-gold/[.10]" : "bg-danger/[.10]"}`}>
           <ShieldAlert className={`mt-0.5 size-[18px] shrink-0 ${corporate ? "text-gold-text" : "text-danger-text"}`} strokeWidth={1.75} aria-hidden="true" />
           <div className="min-w-0">
             <Heading className={`text-sm font-medium leading-5 ${corporate ? "text-gold-text" : "text-danger-text"}`}>
@@ -115,7 +115,7 @@ export function CosignRequestCard({
         </dl>
 
         {transaction.riskReasons.length > 0 && (
-          <div className="space-y-2 rounded-lg border border-border-default bg-terminal px-3 py-2.5">
+          <div className="space-y-2 rounded-lg border border-border-default bg-terminal px-3 py-3">
             <p className="text-xs text-ink-muted">{t("cosignRequestCard.reasons")}</p>
             <ul className="list-disc space-y-1 pl-4 text-[0.8125rem] leading-5 text-ink-secondary marker:text-ink-muted">
               {transaction.riskReasons.map((reason, index) => (

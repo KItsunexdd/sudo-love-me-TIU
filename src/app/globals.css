@@ -37,8 +37,13 @@
   --radius-card: 12px;
   --radius-panel: 16px;
   --radius-phone: 28px;
-  --topbar-height: 56px;
-  --content-width: 1600px;
+  --topbar-height: 3.5rem;
+  --content-width: 100rem;
+}
+
+/* Projectors and large screens: scale the whole interface instead of leaving a small island in the middle. */
+@media (min-width: 1920px) {
+  html { font-size: 18px; }
 }
 
 @layer base {

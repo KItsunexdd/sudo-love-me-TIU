@@ -85,7 +85,7 @@ export function LocaleSwitch() {
         <button type="button" key={option} lang={option} aria-pressed={locale === option}
           aria-label={option === "ru" ? "РУС · Русский / Орыс тілі" : "ҚАЗ · Қазақ тілі / Казахский"}
           onClick={() => setLocale(option)}
-          className={`min-h-8 rounded-lg px-2.5 font-mono text-xs transition-colors ${locale === option ? "bg-elevated text-ink-primary shadow-highlight" : "text-ink-muted hover:text-ink-primary"}`}>
+          className={`min-h-8 rounded-lg px-2 font-mono text-xs transition-colors ${locale === option ? "bg-elevated text-ink-primary shadow-highlight" : "text-ink-muted hover:text-ink-primary"}`}>
           {option === "ru" ? "РУС" : "ҚАЗ"}
         </button>
       ))}

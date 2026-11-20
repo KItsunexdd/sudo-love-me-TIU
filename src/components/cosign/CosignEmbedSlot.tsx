@@ -45,7 +45,7 @@ function SecondPhoneTrigger({ cosignerUserId }: { cosignerUserId: string }) {
           href={href}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex min-h-8 items-center gap-1.5 rounded-lg px-2.5 font-mono text-[0.8125rem] text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink-primary"
+          className="inline-flex min-h-8 items-center gap-1.5 rounded-lg px-3 font-mono text-[0.8125rem] text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink-primary"
         >
           <span>/cosign</span>
           <ExternalLink aria-hidden="true" className="size-3.5" strokeWidth={1.75} />

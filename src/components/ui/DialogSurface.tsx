@@ -122,7 +122,8 @@ export function DialogSurface({
                 </button>
               )}
             </header>
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5">{children}</div>
+            {/* Focusable so keyboard users can scroll long content such as a full verification trace. */}
+            <div tabIndex={0} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5">{children}</div>
             {footer && <footer className="shrink-0 border-t border-border-subtle px-6 py-4">{footer}</footer>}
           </motion.section>
         )}

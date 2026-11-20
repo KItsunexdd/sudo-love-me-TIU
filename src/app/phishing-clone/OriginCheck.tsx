@@ -141,7 +141,7 @@ export function OriginCheck({ rpId, bankOrigin: configuredOrigin }: { rpId: stri
         ))}
 
         {outcome && (
-          <p className="flex items-start gap-2.5 text-sm leading-relaxed text-ink-secondary">
+          <p className="flex items-start gap-2 text-sm leading-relaxed text-ink-secondary">
             <ShieldCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-bcc" strokeWidth={1.75} />
             <span>
               {t("originCheck.domainCheck")} <code className="font-mono text-ink-primary">localhost</code> {t("originCheck.and")}{" "}

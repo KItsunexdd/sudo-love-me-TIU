@@ -223,8 +223,8 @@ export function CosignFeed({ userId, mode, compact = false, hideConnectionBadge 
   return (
     <div className={`min-w-0 ${compact ? "space-y-3 p-3" : "space-y-4"}`}>
       <header className="space-y-2">
-        <div className="flex items-center justify-between gap-2.5">
-          <div className="flex min-w-0 items-center gap-2.5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <span aria-hidden="true" className="grid size-9 shrink-0 place-items-center rounded-full border border-border-default bg-elevated text-[0.8125rem] font-medium text-ink-secondary">
               {initials}
             </span>

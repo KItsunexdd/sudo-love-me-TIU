@@ -68,7 +68,7 @@ export function VerificationStepsList({ trace = [], runningStep, failureCode, co
               key={step}
               variants={reduce || !hasTrace ? reducedMotionVariants : verificationStepVariants}
               className={`grid grid-cols-[1rem_1fr] items-start gap-x-3 gap-y-1 transition-colors sm:grid-cols-[1rem_1fr_auto]
-                ${compact ? "min-h-9 px-3 py-2" : "min-h-10 px-4 py-2.5"} ${style}`}
+                ${compact ? "min-h-9 px-3 py-2" : "min-h-10 px-4 py-2"} ${style}`}
             >
               {Icon ? (
                 <Icon aria-hidden="true" strokeWidth={1.75} className={`mt-0.5 size-4 shrink-0 ${icon} ${state === "RUNNING" ? "motion-safe:animate-spin" : ""}`} />
@@ -92,7 +92,7 @@ export function VerificationStepsList({ trace = [], runningStep, failureCode, co
         })}
       </motion.ol>
       {hasTamperEvidence && (
-        <p className="rounded-lg border border-border-default bg-terminal px-4 py-2.5 text-[0.8125rem] leading-5 text-ink-secondary">
+        <p className="rounded-lg border border-border-default bg-terminal px-4 py-3 text-[0.8125rem] leading-5 text-ink-secondary">
           {t("verificationStepsList.tamperHint")}
         </p>
       )}

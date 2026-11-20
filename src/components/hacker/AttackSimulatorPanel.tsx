@@ -18,7 +18,7 @@ function Scenario({ index, title, detail, active = false, children }: {
 }) {
   return (
     <section className={`flex min-w-0 flex-col gap-2 px-4 py-3 transition-colors 2xl:py-4 ${active ? "bg-[#211819]" : "bg-surface"}`}>
-      <h3 className={`flex items-baseline gap-2.5 text-sm font-medium leading-5 ${active ? "text-danger-text" : "text-ink-primary"}`}>
+      <h3 className={`flex items-baseline gap-2 text-sm font-medium leading-5 ${active ? "text-danger-text" : "text-ink-primary"}`}>
         <span aria-hidden="true" className="font-mono text-xs text-ink-muted">{String(index).padStart(2, "0")}</span>
         <span className="truncate">{title}</span>
       </h3>
@@ -73,7 +73,7 @@ export function AttackSimulatorPanel({ tx, error, device, sample, onResult, onSo
     <div className="space-y-3">
       <h2 className="sr-only">{t("demoStand.hacker")}</h2>
       {armed && (
-        <p role="status" className="rounded-lg border border-danger/45 bg-danger/[.08] px-4 py-2.5 text-[0.8125rem] text-danger-text">
+        <p role="status" className="rounded-lg border border-danger/45 bg-danger/[.08] px-4 py-3 text-[0.8125rem] text-danger-text">
           {t("attackSimulatorPanel.armed")}
         </p>
       )}
@@ -163,7 +163,7 @@ export function AttackSimulatorPanel({ tx, error, device, sample, onResult, onSo
               label={t("attackSimulatorPanel.analysis")}
               value={tab}
               onChange={setTab}
-              className="[&_button]:px-2.5"
+              className="[&_button]:px-3"
               options={[{ value: "steps", label: t("attackSimulatorPanel.steps") }, { value: "json", label: "JSON / Diff" }]}
             />
           </div>
