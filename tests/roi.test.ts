@@ -30,7 +30,7 @@ describe("ROI-калькулятор БЦК (формулы ТЗ §9.5 и сце
     expect(result.totalYearlyImpact).toBe(3_318_000_000);
   });
 
-  it("считает Консервативный сценарий из docs/PITCH.md §5.3 точно до тенге", () => {
+  it("считает Консервативный сценарий точно до тенге", () => {
     const conservative = ROI_PRESETS.find(preset => preset.id === "conservative");
     expect(conservative).toBeDefined();
 

@@ -146,14 +146,14 @@ npm run dev
 | `npm test` | 151 тест Vitest: протокол, шесть атак, цепочка 2-of-2, API, SSE, риск, ROI, полнота казахского словаря. Ещё два `it.fails` фиксируют известные ограничения MVP |
 | `npm run e2e` | Playwright: полный сценарий защиты, блокировка Passkey на клоне, мобильная «Вторая рука» на 375×812, казахский интерфейс. Один раз нужен `npx playwright install chromium` |
 | `npm run lint` · `npm run build` | ESLint и production-сборка со строгой проверкой типов |
-| `npm run bench` | Замеры криптографии, результаты пишутся в [docs/BENCHMARKS.md](docs/BENCHMARKS.md) |
+| `npm run bench` | Замеры криптографии: подпись и проверка ML-DSA-65, WebAuthn, полный цикл перевода |
 | `npm run preflight` | Проверка запущенного стенда перед показом: заголовки безопасности, SSE, сквозной перевод, сброс демо |
 
 Основные экраны и диалоги проверены axe-core: нарушений WCAG не найдено.
 
 ## Производительность
 
-Apple M4, Node.js 26, по 200 замеров на операцию ([полная таблица](docs/BENCHMARKS.md)):
+Apple M4, Node.js 26, по 200 замеров на операцию (`npm run bench`):
 
 | Операция | Медиана | p95 |
 |---|---:|---:|
@@ -195,11 +195,3 @@ Apple M4, Node.js 26, по 200 замеров на операцию ([полна
 | Восемь правил Risk Engine | Антифрод-скоринг БЦК и телеметрия удалённого доступа |
 
 Подробности — в отчётах проверок: [криптоаудит ядра](docs/AUDIT_CORE.md), [red team](docs/REDTEAM.md) и [финальное ревью](docs/FINAL_REVIEW.md).
-
-## Документация
-
-- [docs/PITCH.md](docs/PITCH.md) — сценарий трёхминутного демо по секундам с репликами
-- [docs/CHEATSHEET.md](docs/CHEATSHEET.md) — шпаргалка спикера на одну страницу
-- [docs/JURY_QA.md](docs/JURY_QA.md) — ответы на вопросы жюри: безопасность, регулятор, экономика
-- [docs/DESIGN.md](docs/DESIGN.md) — дизайн-система интерфейса
-- [docs/BENCHMARKS.md](docs/BENCHMARKS.md) — замеры производительности
