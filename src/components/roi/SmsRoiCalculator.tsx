@@ -252,7 +252,7 @@ export function SmsRoiCalculator() {
         {/* Правая колонка — раздельный финансовый эффект, сравнение и SVG-график */}
         <div className="space-y-5 lg:col-span-7">
           {/* РАЗДЕЛЬНЫЕ главные карточки (замечание аудитора питча) */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div data-testid="roi-annual-savings" className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Card variant="success" className="flex flex-col justify-between">
               <div>
                 <div className="flex flex-wrap items-center justify-between gap-2">

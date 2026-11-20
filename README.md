@@ -2,7 +2,7 @@
 
 **Платформа гибридной криптографической подписи банковских операций без SMS для экосистемы `bcc.kz` (B2C) и `BCC Business` (B2B) — кейс АО «Банк ЦентрКредит» (ITU Hackathon 2026).**
 
-`[Next.js 15.5 · TypeScript Strict]` `[ML-DSA-65 · NIST FIPS 204]` `[W3C WebAuthn · Passkeys]` `[Vitest · 11 тест-сьютов / 139 тестов]`
+`[Next.js 15.5 · TypeScript Strict]` `[ML-DSA-65 · NIST FIPS 204]` `[W3C WebAuthn · Passkeys]` `[Vitest · 148 тестов]` `[Playwright · e2e демо-сценария]`
 
 ---
 
@@ -136,15 +136,19 @@ npm run build
 ## Подготовка к защите
 
 ```bash
+npx playwright install chromium # Один раз на машине, с которой запускаются e2e-тесты
 npm run bench
 npm run build && npm start
 # В отдельном терминале при запущенном стенде
 npm run preflight
+npm run e2e
 ```
 
 `bench` печатает замеры и обновляет [docs/BENCHMARKS.md](docs/BENCHMARKS.md). `preflight` проверяет запущенный демо-стенд и завершает работу с `READY` (код 0) или `NOT READY` (код 1). После сквозного прогона он сбрасывает демо-данные с сохранением Passkeys.
 
-По умолчанию проверяется `http://localhost:3000`. Для другого порта задайте `SAFESIGN_ORIGIN` при запуске сервера и `BASE_URL` при проверке, например `BASE_URL=http://localhost:3106 npm run preflight`.
+Playwright проверяет демо-сценарий, блокировку Passkey на клоне и мобильную вёрстку «Второй руки». Запускайте e2e до привязки устройств для защиты. Сценарий начинает со сброса демо-данных и зарегистрированных устройств.
+
+По умолчанию оба прогона используют `http://localhost:3000`. Для другого порта задайте `SAFESIGN_ORIGIN` при запуске стенда и `BASE_URL` при проверке, например `BASE_URL=http://localhost:3106 npm run e2e`.
 
 ## Сценарий демо за 3 минуты
 

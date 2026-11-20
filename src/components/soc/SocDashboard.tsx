@@ -317,7 +317,7 @@ export function SocDashboard() {
           {loading ? (
             <Skeleton className="mt-4 h-9 w-24" />
           ) : (
-            <div className={`mt-3 text-ink-primary ${kpiNumberClass}`}>
+            <div data-testid="soc-attacks-blocked" className={`mt-3 text-ink-primary ${kpiNumberClass}`}>
               <SocAnimatedMetric
                 value={aggregates?.attacksBlocked ?? 0}
                 format={v => Math.round(v).toLocaleString("ru-KZ")}
