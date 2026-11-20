@@ -13,3 +13,5 @@ data/store.json
 .vercel
 next-env.d.ts
 *.tsbuildinfo
+demo-video/
+test-results-record/

@@ -40,7 +40,10 @@ let page: Page;
 
 test.beforeAll(async ({ browser, baseURL, request }) => {
   await resetDemo(request, baseURL, false);
-  context = await browser.newContext();
+  // RECORD=1 (npm run record-demo) keeps a video of the whole run as a stage backup.
+  context = await browser.newContext(process.env.RECORD === "1"
+    ? { recordVideo: { dir: "demo-video", size: { width: 1440, height: 900 } } }
+    : {});
   page = await context.newPage();
   // This same-origin JSON document does not open the keystore.
   await page.goto("/api/users");

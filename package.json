@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "e2e": "playwright test",
+    "record-demo": "rm -rf demo-video && RECORD=1 playwright test e2e/demo.spec.ts --project=chromium --output=test-results-record && node -e \"const fs=require('fs');const f=fs.readdirSync('demo-video').find(n=>n.endsWith('.webm'));fs.renameSync('demo-video/'+f,'demo-video/bcc-safesign-demo.webm');console.log('demo-video/bcc-safesign-demo.webm')\"",
     "bench": "node --enable-source-maps --import ./scripts/register-ts.mjs ./scripts/bench.ts",
     "preflight": "node --enable-source-maps --import ./scripts/register-ts.mjs ./scripts/preflight.ts"
   },

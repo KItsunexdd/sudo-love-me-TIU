@@ -186,7 +186,7 @@ describe("Гибридная проверка и атомарное исполн
     const open = vi.fn<(error?: ApiError) => void>();
     const blockedShield = vi.spyOn(shield, "AttackBlockedShield").mockImplementation(({ onInspect }) => {
       onInspect?.();
-      return null;
+      return null as unknown as ReturnType<typeof shield.AttackBlockedShield>;
     });
     try {
       renderToStaticMarkup(createElement(TransactionResult, {

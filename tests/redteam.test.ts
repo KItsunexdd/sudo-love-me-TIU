@@ -407,7 +407,7 @@ describe("Red Team: уязвимости периметра, SSE, ввода, SO
   });
 
   it("отмена регистрации Passkey возвращает пользователю выбор и не создаёт Software Key", async () => {
-    vi.spyOn(keystore, "prepareKeystore").mockResolvedValue(undefined);
+    vi.spyOn(keystore, "prepareKeystore").mockResolvedValue(undefined as unknown as CryptoKey);
     const create = vi.fn().mockRejectedValue(new DOMException("Отмена", "NotAllowedError"));
     vi.stubGlobal("PublicKeyCredential", class {});
     vi.stubGlobal("navigator", { credentials: { create, get: vi.fn() } });
