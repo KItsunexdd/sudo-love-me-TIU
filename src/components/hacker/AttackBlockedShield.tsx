@@ -9,7 +9,6 @@ import { escapeDisplayControls } from "@/lib/crypto/canonical";
 import type { TamperDiff } from "@/lib/db/types";
 import { formatIban, formatMs, formatTenge } from "@/lib/ui/format";
 import { attackShieldVariants, reducedMotionVariants } from "@/lib/ui/motion";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { JsonDiffViewer } from "@/components/ui/JsonDiffViewer";
 
@@ -49,51 +48,51 @@ export function AttackBlockedShield({ error, httpStatus, durationMs, onInspect, 
       initial={reduce ? false : "hidden"}
       animate="visible"
       variants={reduce ? reducedMotionVariants : attackShieldVariants}
-      className="space-y-3.5 rounded-[20px] border-2 border-danger/75 bg-surface bg-shield-danger p-4 shadow-glow-danger sm:p-5"
+      className="space-y-4 rounded-xl border border-danger/50 bg-[#1C1718] p-4 2xl:p-5"
     >
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="relative grid size-12 shrink-0 place-items-center rounded-2xl border border-danger/60 bg-danger/20 text-danger-text">
-          <span aria-hidden="true" className="absolute inset-0 rounded-2xl border border-danger/55 motion-safe:animate-ping opacity-35" />
-          <ShieldAlert aria-hidden="true" className="relative size-7" />
-        </span>
-        <div className="min-w-0 space-y-1.5">
-          <h2 className="text-xl font-extrabold tracking-tight text-ink-primary sm:text-[22px]">{t("attackBlockedShield.repelled")}</h2>
-          <Badge tone="danger" className="max-w-full !whitespace-normal break-all font-mono text-[13px] font-bold tabular-nums">
-            HTTP {httpStatus} • {error.failureCode}
-          </Badge>
+      <div className="flex items-start gap-3">
+        <ShieldAlert aria-hidden="true" className="mt-1 size-5 shrink-0 text-danger-text" strokeWidth={1.75} />
+        <div className="min-w-0 space-y-1">
+          <h2 className="type-h1">{t("attackBlockedShield.repelled")}</h2>
+          <p className="break-all font-mono text-[0.8125rem] tabular-nums text-danger-text">
+            HTTP {httpStatus} · {error.failureCode}
+          </p>
         </div>
       </div>
 
-      <p className="text-sm leading-relaxed text-ink-secondary">{failureText(locale, error.failureCode, error.message)}</p>
+      <p className="text-sm text-ink-secondary">{failureText(locale, error.failureCode, error.message)}</p>
 
       {headline && (
-        <div className="rounded-xl border border-danger/45 bg-terminal/90 px-3.5 py-2.5 text-sm leading-snug">
-          <span className="text-ink-secondary">{t("attackBlockedShield.signed")} </span>
-          <strong className={`${headline.mono ? "font-mono" : ""} font-bold tabular-nums text-bcc`}>
-            {escapeDisplayControls(headline.original)}
-          </strong>
-          <span className="mx-1.5 text-ink-muted">·</span>
-          <span className="text-ink-secondary">{t("attackBlockedShield.received")} </span>
-          <strong className={`${headline.mono ? "font-mono" : ""} font-bold tabular-nums text-danger-text`}>
-            {escapeDisplayControls(headline.tampered)}
-          </strong>
-        </div>
+        <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-4 gap-y-2 rounded-lg border border-border-default bg-terminal px-4 py-3 text-sm">
+          <div className="contents">
+            <dt className="text-ink-secondary">{t("attackBlockedShield.signed")}</dt>
+            <dd className={`${headline.mono ? "font-mono" : ""} break-all text-[0.9375rem] tabular-nums text-ink-primary`}>
+              {escapeDisplayControls(headline.original)}
+            </dd>
+          </div>
+          <div className="contents">
+            <dt className="text-ink-secondary">{t("attackBlockedShield.received")}</dt>
+            <dd className={`${headline.mono ? "font-mono" : ""} break-all text-[0.9375rem] tabular-nums text-danger-text`}>
+              {escapeDisplayControls(headline.tampered)}
+            </dd>
+          </div>
+        </dl>
       )}
 
       {error.tamperDiff?.length ? <JsonDiffViewer tamperDiff={error.tamperDiff} /> : null}
 
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium text-ink-secondary sm:text-sm">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-xs tabular-nums text-ink-muted">
         {computedMs !== undefined && (
-          <span>{t("attackBlockedShield.elapsed")} <span className="mono-data font-bold text-ink-primary">{formatMs(computedMs)}</span></span>
+          <span>{t("attackBlockedShield.elapsed")} <span className="text-ink-primary">{formatMs(computedMs)}</span></span>
         )}
         {failed.length > 0 && (
-          <span>{t("attackBlockedShield.failedSteps")} <span className="font-mono font-semibold tabular-nums text-danger-text">{failed.map(row => `№${row.step}`).join(", ")}</span></span>
+          <span>{t("attackBlockedShield.failedSteps")} <span className="text-danger-text">{failed.map(row => `№${row.step}`).join(", ")}</span></span>
         )}
-        <span>{t("attackBlockedShield.logged")}</span>
+        <span className="font-sans">{t("attackBlockedShield.logged")}</span>
       </div>
 
       {(onInspect || onReset) && (
-        <div className="flex flex-wrap gap-2 pt-0.5">
+        <div className="flex flex-wrap gap-2">
           {onInspect && <Button size="sm" variant="secondary" icon={<Microscope className="size-4" />} onClick={onInspect}>{t("common.inspect")}</Button>}
           {onReset && <Button size="sm" variant="ghost" icon={<RotateCcw className="size-4" />} onClick={onReset}>{t("common.reset")}</Button>}
         </div>

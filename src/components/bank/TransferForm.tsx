@@ -29,12 +29,12 @@ function presetValues(name: PresetName, presets: Presets) {
 function RiskMeterSkeleton() {
   const { t } = useT();
   return (
-    <div aria-busy="true" aria-label={t("transferForm.assessing")} className="space-y-2.5">
+    <div aria-busy="true" aria-label={t("transferForm.assessing")} className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <Skeleton className="h-4 w-36" />
-        <Skeleton className="h-6 w-28 rounded-full" />
+        <Skeleton className="h-4 w-28" />
       </div>
-      <Skeleton className="h-2.5 w-full rounded-full" />
+      <Skeleton className="h-1 w-full rounded-full" />
       <Skeleton className="h-4 w-56" />
     </div>
   );
@@ -98,11 +98,11 @@ export function TransferForm({ mode, sender, presets, initialPreset, device, dev
     }));
   }
 
-  const fieldClass = "mt-1 h-9 w-full min-w-0 rounded-xl border border-border-default bg-terminal px-3 text-sm text-ink-primary transition-colors hover:border-border-strong focus-visible:border-bcc/70 disabled:text-ink-secondary 2xl:h-10";
+  const fieldClass = "mt-1.5 h-10 w-full min-w-0 rounded-lg border border-border-default bg-elevated px-3 text-sm text-ink-primary transition-colors hover:border-border-strong focus-visible:border-bcc/60 read-only:text-ink-secondary disabled:text-ink-secondary";
 
   return (
     <form onSubmit={event => { event.preventDefault(); if (valid && device && !busy && !cooling) onPrepare({ ...riskInput, recipientName, purpose }); }}>
-      <fieldset disabled={busy} className="min-w-0 space-y-2.5 2xl:space-y-3">
+      <fieldset disabled={busy} className="min-w-0 space-y-3">
         {business ? (
           <h2 className="type-h2">{t("common.invoice")}</h2>
         ) : (
@@ -111,7 +111,7 @@ export function TransferForm({ mode, sender, presets, initialPreset, device, dev
             value={operation}
             onChange={chooseOperation}
             options={productOptions}
-            className="flex w-full [&_button]:whitespace-normal [&_button]:px-2 [&_button]:py-1.5"
+            className="flex w-full [&_button]:whitespace-normal [&_button]:px-2"
           />
         )}
 
@@ -120,7 +120,7 @@ export function TransferForm({ mode, sender, presets, initialPreset, device, dev
             size="sm"
             variant="secondary"
             className="tabular-nums"
-            icon={<UserRound size={15} />}
+            icon={<UserRound />}
             onClick={() => applyPreset(business ? "office" : "son")}
           >
             {business ? t("transferForm.office", { value: formatTenge(120_000) }) : t("transferForm.son", { value: formatTenge(presets.son.amountTenge) })}
@@ -129,7 +129,7 @@ export function TransferForm({ mode, sender, presets, initialPreset, device, dev
             size="sm"
             variant="secondary"
             className="tabular-nums"
-            icon={business ? undefined : <PhoneIncoming size={15} className="text-gold" />}
+            icon={business ? undefined : <PhoneIncoming />}
             onClick={() => applyPreset(business ? "supplier" : "unknown")}
           >
             {business
@@ -138,7 +138,7 @@ export function TransferForm({ mode, sender, presets, initialPreset, device, dev
           </Button>
         </div>
 
-        <div className="grid gap-x-2.5 gap-y-2 sm:grid-cols-2">
+        <div className="grid gap-x-3 gap-y-3 sm:grid-cols-2">
           <label className="type-label text-ink-secondary">
             {t("common.recipient")}
             <input
@@ -183,12 +183,12 @@ export function TransferForm({ mode, sender, presets, initialPreset, device, dev
           </label>
         </div>
 
-        <div className="grid gap-2 py-0.5 sm:grid-cols-[1.45fr_1fr]">
+        <div className="grid gap-3 py-1 sm:grid-cols-[1.45fr_1fr]">
           <Toggle label={t("transferForm.call")} checked={call} onChange={value => setForm({ ...form, call: value })} />
           <Toggle label={t("transferForm.night")} checked={night} onChange={value => setForm({ ...form, night: value })} />
         </div>
 
-        <div aria-live="polite" className="min-h-[96px] rounded-xl border border-border-default bg-surface p-3">
+        <div aria-live="polite" className="min-h-24 rounded-xl border border-border-default bg-surface p-4">
           {current?.risk ? (
             <RiskMeter {...current.risk} />
           ) : current?.error ? (
@@ -205,29 +205,29 @@ export function TransferForm({ mode, sender, presets, initialPreset, device, dev
             type="submit"
             size="lg"
             className="w-full"
-            icon={<Fingerprint size={22} />}
+            icon={<Fingerprint />}
             loading={busy}
             disabled={cooling || !current?.risk || !recipientName.trim()}
           >
             <span>
               {t("transferForm.sign")}
-              <span className="block text-xs font-medium opacity-85">Passkey + ML-DSA-65</span>
+              <span className="block font-mono text-xs font-normal opacity-70">Passkey + ML-DSA-65</span>
             </span>
           </Button>
         ) : (
-          <Button size="lg" className="w-full" icon={<KeyRound size={19} />} disabled={deviceLoading} onClick={onRegister}>
+          <Button size="lg" className="w-full" icon={<KeyRound />} disabled={deviceLoading} onClick={onRegister}>
             {t("common.enrollQuick")}
           </Button>
         )}
 
         {armed && (
-          <p className="text-center text-xs font-medium text-danger-text">
+          <p className="text-center text-xs text-danger-text">
             {t("transferForm.armed")}
           </p>
         )}
 
         {device?.deviceKind === "SOFTWARE_FALLBACK" && (
-          <p className="text-center font-mono text-xs text-amber-300">
+          <p className="text-center font-mono text-xs text-gold-text">
             {t("transferForm.fallback")}
           </p>
         )}

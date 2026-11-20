@@ -5,7 +5,6 @@ import { failureText } from "@/lib/i18n/server-text";
 import { useT } from "@/components/shell/LocaleProvider";
 import { CircleAlert } from "lucide-react";
 import type { ReactNode } from "react";
-import { Badge } from "./Badge";
 import { Card } from "./Card";
 
 const copy: Partial<Record<string, [title: MessageKey, description: MessageKey]>> = {
@@ -50,13 +49,13 @@ export function ErrorCard({ error, title, action, children, className = "" }: {
   return (
     <Card variant="danger" role="alert" className={className}>
       <div className="flex items-start gap-3">
-        <CircleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-danger-text" />
+        <CircleAlert aria-hidden="true" className="mt-0.5 size-[18px] shrink-0 text-danger-text" strokeWidth={1.75} />
         <div className="min-w-0 space-y-2">
           <h3 className="type-h3">{title ?? t(known?.[0] ?? "errorCard.failed")}</h3>
           <p className="text-sm text-ink-secondary">{known ? t(known[1]) : (failureText(locale, error.failureCode, error.message) || t("errorCard.retry"))}</p>
-          <Badge tone="danger" className="max-w-full !whitespace-normal break-all font-mono text-[13px] font-bold tabular-nums">{error.failureCode}</Badge>
+          <p className="break-all font-mono text-[0.8125rem] text-danger-text">{error.failureCode}</p>
           {children}
-          {action && <div>{action}</div>}
+          {action && <div className="pt-1">{action}</div>}
         </div>
       </div>
     </Card>

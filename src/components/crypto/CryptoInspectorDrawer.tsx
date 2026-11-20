@@ -39,17 +39,17 @@ function SignatureEvidence({ signature, title }: { signature: SignatureBundle; t
     }
   }
   return <Card className="space-y-3">
-    <h3 className="type-h2">{title}</h3>
-    <h4 className="flex items-center gap-2 text-sm font-semibold"><Fingerprint aria-hidden="true" size={18} className="text-bcc" /> WebAuthn · clientDataJSON</h4>
+    <h3 className="type-h2 pb-1">{title}</h3>
+    <h4 className="flex items-center gap-2 type-h3"><Fingerprint aria-hidden="true" size={16} strokeWidth={1.75} className="text-ink-muted" /> WebAuthn · clientDataJSON</h4>
     <JsonDiffViewer json={signature.webAuthnClientDataJson} />
     <h4 className="type-h3">{t("cryptoInspectorDrawer.signature")}</h4>
     <p className="mono-data tabular-nums">{signature.webAuthnSignatureBytesLength} {t("cryptoInspectorDrawer.bytes")}</p>
     <WebAuthnBytes signature={signature} />
-    <h4 className="flex items-center gap-2 text-sm font-semibold"><Atom aria-hidden="true" size={18} className="text-quantum" /> ML-DSA-65 · FIPS 204</h4>
+    <h4 className="flex items-center gap-2 type-h3"><Atom aria-hidden="true" size={16} strokeWidth={1.75} className="text-ink-muted" /> ML-DSA-65 · FIPS 204</h4>
     <p className="mono-data tabular-nums">{signature.pqSignatureBytesLength.toLocaleString("ru-RU")} {t("cryptoInspectorDrawer.bytes")}</p>
-    <p className="break-all rounded-lg border border-border-default bg-terminal p-2.5 font-mono text-xs text-ink-secondary">{signature.pqSignatureHexPreview}…</p>
-    <Button size="sm" variant="secondary" icon={<Copy size={14} />} onClick={() => void copy()}>{t("cryptoInspectorDrawer.copy")}</Button>
-    <div className="flex flex-wrap gap-2">{signature.clientTimings ? <>
+    <p className="break-all rounded-lg border border-border-default bg-terminal p-3 font-mono text-xs text-ink-secondary">{signature.pqSignatureHexPreview}…</p>
+    <Button size="sm" variant="secondary" icon={<Copy />} onClick={() => void copy()}>{t("cryptoInspectorDrawer.copy")}</Button>
+    <div className="flex flex-wrap gap-x-4 gap-y-1">{signature.clientTimings ? <>
       <LatencyBadge label={t("cryptoInspectorDrawer.clientWebAuthn")} ms={signature.clientTimings.webauthnMs} />
       <LatencyBadge label={t("cryptoInspectorDrawer.clientPq")} ms={signature.clientTimings.pqSignMs} /></> :
       <span className="text-sm text-ink-muted">{t("cryptoInspectorDrawer.noTimings")}</span>}
@@ -62,14 +62,14 @@ function DrawerLoadingSkeleton() {
   const { t } = useT();
   return (
     <div aria-busy="true" aria-label={t("cryptoInspectorDrawer.loading")} className="space-y-4">
-      <div className="flex gap-2">
-        <Skeleton className="h-7 w-32 rounded-full" />
-        <Skeleton className="h-7 w-28 rounded-full" />
+      <div className="flex gap-4">
+        <Skeleton className="h-4 w-28" />
+        <Skeleton className="h-4 w-24" />
       </div>
       <Skeleton className="h-5 w-44" />
       <div className="space-y-1.5">
         {Array.from({ length: 7 }).map((_, index) => (
-          <Skeleton key={index} className="h-10 w-full rounded-xl" />
+          <Skeleton key={index} className="h-10 w-full rounded-lg" />
         ))}
       </div>
       <Skeleton className="h-5 w-48" />
@@ -96,19 +96,19 @@ export function CryptoInspectorDrawer({ txId, userId, open = true, onClose, onQu
   const owner = (id: string) => users.find(user => user.id === id)?.fullName ?? id;
   const link = tx?.requiresCoSign && tx.primarySignature ? signatureDigest(tx.primarySignature.pqSignatureBase64) : null;
   return <Drawer open={open && Boolean(txId)} onClose={onClose} title="Crypto Inspector" description={<span className="break-all font-mono">{txId}</span>}
-    footer={onQuantum && <Button size="sm" variant="secondary" icon={<Atom size={16} />} onClick={onQuantum}>{t("cryptoInspectorDrawer.simulate")}</Button>}>
+    footer={onQuantum && <Button size="sm" variant="secondary" icon={<Atom />} onClick={onQuantum}>{t("cryptoInspectorDrawer.simulate")}</Button>}>
     {attemptError && <section className="mb-5 space-y-3">
       <h3 className="type-h2">{t("cryptoInspectorDrawer.rejected")}</h3>
       <ErrorCard error={attemptError} />
       <VerificationStepsList trace={attemptError.verificationTrace} failureCode={attemptError.failureCode} />
     </section>}
     {error ? <ErrorCard error={error} action={<Button size="sm" onClick={retry}>{t("common.refresh")}</Button>} /> : !tx ? <DrawerLoadingSkeleton /> :
-      <section className="space-y-4">
+      <section className="space-y-5">
         {attemptError && <h3 className="type-h2">{tx.status === "EXECUTED" ? t("cryptoInspectorDrawer.executed") : t("cryptoInspectorDrawer.original")}</h3>}
-        <div className="flex flex-wrap gap-2"><Badge status={tx.status} /><Badge status={tx.riskLevel} /></div>
+        <div className="flex flex-wrap gap-4"><Badge status={tx.status} /><Badge status={tx.riskLevel} /></div>
         <h3 className="type-h2">{t("cryptoInspectorDrawer.verify")}</h3>
         <VerificationStepsList trace={tx.verificationTrace} failureCode={tx.failureCode} />
-        {tx.cosignSignature && tx.primaryTrace && <details className="rounded-xl border border-border-default bg-surface p-3"><summary className="cursor-pointer text-sm font-medium text-ink-secondary">{t("cryptoInspectorDrawer.first")}</summary>
+        {tx.cosignSignature && tx.primaryTrace && <details className="rounded-lg border border-border-default bg-surface p-4"><summary className="cursor-pointer text-sm text-ink-secondary">{t("cryptoInspectorDrawer.first")}</summary>
           <div className="mt-3"><VerificationStepsList trace={tx.primaryTrace} /></div></details>}
         <h3 className="type-h2">{t("cryptoInspectorDrawer.fields")}</h3>
         <HashChip value={tx.txHashHex} />
@@ -119,11 +119,11 @@ export function CryptoInspectorDrawer({ txId, userId, open = true, onClose, onQu
         {tx.rejectedEvidence && <Card className="space-y-3"><h3 className="type-h2">{t("cryptoInspectorDrawer.rejectedAssertion")}</h3>
           {tx.rejectedEvidence.clientDataJson && <><h4 className="type-h3">WebAuthn · clientDataJSON</h4><JsonDiffViewer json={tx.rejectedEvidence.clientDataJson} /></>}
           {tx.rejectedEvidence.pqBytes !== undefined && <p className="mono-data text-sm tabular-nums">ML-DSA-65 · {tx.rejectedEvidence.pqBytes.toLocaleString("ru-RU")} {t("cryptoInspectorDrawer.bytes")}</p>}
-          {tx.rejectedEvidence.pqHexPreview && <p className="mono-data break-all rounded-lg border border-border-default bg-terminal p-2 text-xs text-ink-secondary">{tx.rejectedEvidence.pqHexPreview}…</p>}
-          {tx.rejectedEvidence.clientTimings && <div className="flex flex-wrap gap-2"><LatencyBadge label={t("cryptoInspectorDrawer.clientWebAuthn")} ms={tx.rejectedEvidence.clientTimings.webauthnMs} />
+          {tx.rejectedEvidence.pqHexPreview && <p className="mono-data break-all rounded-lg border border-border-default bg-terminal p-3 text-xs text-ink-secondary">{tx.rejectedEvidence.pqHexPreview}…</p>}
+          {tx.rejectedEvidence.clientTimings && <div className="flex flex-wrap gap-x-4 gap-y-1"><LatencyBadge label={t("cryptoInspectorDrawer.clientWebAuthn")} ms={tx.rejectedEvidence.clientTimings.webauthnMs} />
             <LatencyBadge label={t("cryptoInspectorDrawer.clientPq")} ms={tx.rejectedEvidence.clientTimings.pqSignMs} /></div>}
         </Card>}
-        {tx.requiresCoSign && <Card className="space-y-2"><h3 className="flex items-center gap-2 type-h3"><Link2 aria-hidden="true" size={16} className="text-gold" /> {t("cryptoInspectorDrawer.chain")}</h3>
+        {tx.requiresCoSign && <Card className="space-y-2"><h3 className="flex items-center gap-2 type-h3"><Link2 aria-hidden="true" size={16} strokeWidth={1.75} className="text-ink-muted" /> {t("cryptoInspectorDrawer.chain")}</h3>
           <p className="text-sm">{owner(tx.payload.senderId)} → {owner(tx.cosignerUserId ?? t("common.secondHand"))}</p>
           {link && <HashChip value={link} label={t("cryptoInspectorDrawer.firstHash")} />}
           <p className="text-sm text-ink-secondary">{t("cryptoInspectorDrawer.binding")}</p></Card>}

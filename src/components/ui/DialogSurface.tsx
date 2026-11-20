@@ -84,8 +84,8 @@ export function DialogSurface({
       onClick={event => {
         if (event.target === event.currentTarget && open && dismissible) onClose();
       }}
-      className={`fixed inset-0 m-0 h-[100dvh] max-h-none w-full max-w-none overflow-hidden bg-transparent p-0 text-ink-primary open:flex
-        ${right ? "justify-end backdrop:bg-black/65 backdrop:backdrop-blur-sm" : "items-center justify-center p-4 backdrop:bg-[#030806]/80 backdrop:backdrop-blur-md"}`}
+      className={`fixed inset-0 m-0 h-[100dvh] max-h-none w-full max-w-none overflow-hidden bg-transparent p-0 text-ink-primary open:flex backdrop:bg-black/60
+        ${right ? "justify-end" : "items-center justify-center p-4"}`}
     >
       <AnimatePresence
         onExitComplete={() => {
@@ -102,13 +102,13 @@ export function DialogSurface({
             animate="visible"
             exit="exit"
             variants={reduce ? reducedMotionVariants : right ? drawerRightVariants : modalVariants}
-            className={`flex w-full flex-col overflow-hidden border-border-strong shadow-modal
-              ${right ? "h-full max-w-[640px] border-l bg-[#0A1612]" :
-                `max-h-full rounded-[20px] border bg-surface ${wide ? "max-w-[760px]" : "max-w-[540px]"}`} ${className}`}
+            className={`flex w-full flex-col overflow-hidden border-border-default bg-surface shadow-modal
+              ${right ? "h-full max-w-[640px] border-l" :
+                `max-h-full rounded-2xl border ${wide ? "max-w-[760px]" : "max-w-[540px]"}`} ${className}`}
           >
-            <header className={`flex shrink-0 items-center justify-between gap-4 border-b border-border-subtle px-5 py-4 ${right ? "min-h-[72px]" : ""}`}>
-              <div className="min-w-0">
-                <h2 id={`${id}-title`} className="type-h1 break-words">{title}</h2>
+            <header className={`flex shrink-0 items-start justify-between gap-4 border-b border-border-subtle px-6 py-4 ${right ? "min-h-16" : ""}`}>
+              <div className="min-w-0 pt-1">
+                <h2 id={`${id}-title`} className="type-h2 break-words">{title}</h2>
                 {description && <div id={`${id}-description`} className="mt-1 text-sm text-ink-secondary">{description}</div>}
               </div>
               {dismissible && (
@@ -116,14 +116,14 @@ export function DialogSurface({
                   type="button"
                   aria-label={t("common.close")}
                   onClick={onClose}
-                  className="shrink-0 rounded-xl border border-transparent p-2 text-ink-secondary transition-colors hover:border-border-strong hover:bg-surface-hover hover:text-ink-primary"
+                  className="-mr-2 shrink-0 rounded-lg p-2 text-ink-muted transition-colors hover:bg-surface-hover hover:text-ink-primary"
                 >
-                  <X aria-hidden="true" className="size-5" />
+                  <X aria-hidden="true" className="size-[18px]" strokeWidth={1.75} />
                 </button>
               )}
             </header>
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5">{children}</div>
-            {footer && <footer className="shrink-0 border-t border-border-subtle p-5">{footer}</footer>}
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5">{children}</div>
+            {footer && <footer className="shrink-0 border-t border-border-subtle px-6 py-4">{footer}</footer>}
           </motion.section>
         )}
       </AnimatePresence>

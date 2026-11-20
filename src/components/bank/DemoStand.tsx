@@ -2,14 +2,14 @@
 
 import { useT } from "@/components/shell/LocaleProvider";
 import { useEffect, useRef, useState } from "react";
-import { CircleDot, Landmark, ShieldCheck, Snowflake, Users } from "lucide-react";
+import { Landmark, ShieldCheck, Snowflake } from "lucide-react";
 import { useDemoMode } from "@/components/shell/DemoModeProvider";
 import { CosignEmbedSlot } from "@/components/cosign/CosignEmbedSlot";
 import { CryptoInspectorDrawer } from "@/components/crypto/CryptoInspectorDrawer";
 import { useTransaction } from "@/components/crypto/useTransaction";
 import { AttackSimulatorPanel } from "@/components/hacker/AttackSimulatorPanel";
 import { QuantumCompareModal } from "@/components/hacker/QuantumCompareModal";
-import { Button, Card, ErrorCard, PhoneFrame, SegmentedControl, Skeleton } from "@/components/ui";
+import { Badge, Button, Card, ErrorCard, PhoneFrame, SegmentedControl, Skeleton } from "@/components/ui";
 import { api, type ApiError, type ApiResult, type DemoUsersResponse, type ExecuteResponse, type PrepareInput, type PrepareResponse } from "@/lib/client/api";
 import { useDemoState } from "@/lib/client/useDemoState";
 import { useEventStream } from "@/lib/client/useEventStream";
@@ -31,33 +31,29 @@ function AccountCard({ sender, cosigner, mode }: Pick<StandProps, "sender" | "co
   const { t } = useT();
   const business = mode === "B2B";
   return (
-    <section
-      className={`relative isolate overflow-hidden rounded-2xl border border-border-strong px-4 py-2.5 sm:px-4 2xl:px-5 2xl:py-3.5
-        ${business ? "bg-[image:var(--gradient-account-card-b2b)]" : "bg-[image:var(--gradient-account-card)]"}`}
-    >
-      <div aria-hidden="true" className="pointer-events-none absolute -right-12 -top-16 -z-10 size-52 rounded-full opacity-35 [background:repeating-radial-gradient(ellipse_at_center,transparent_0_8px,#47725f_9px,transparent_10px_16px)]" />
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Landmark aria-hidden="true" size={15} className={business ? "text-gold" : "text-bcc"} />
-          <span className="text-xs font-semibold sm:text-sm">{business ? "BCC Business" : "bcc.kz"}</span>
-          <span className="text-ink-muted">·</span>
-          <h1 className="truncate text-sm font-semibold text-ink-primary">{business ? "ТОО «Алатау Логистик»" : sender.fullName}</h1>
+    <section className="rounded-xl border border-border-default bg-[linear-gradient(180deg,#1D1E21,#18191B)] px-4 py-3 shadow-highlight 2xl:px-5 2xl:py-4">
+      <div className="flex items-center justify-between gap-2 text-[0.8125rem]">
+        <div className="flex min-w-0 items-center gap-2">
+          <Landmark aria-hidden="true" size={16} strokeWidth={1.75} className="shrink-0 text-ink-muted" />
+          <span className="shrink-0 text-ink-secondary">{business ? "BCC Business" : "bcc.kz"}</span>
+          <span aria-hidden="true" className="text-ink-disabled">·</span>
+          <h1 className="truncate text-[0.8125rem] font-medium text-ink-primary">{business ? "ТОО «Алатау Логистик»" : sender.fullName}</h1>
         </div>
-        <span className="mono-data shrink-0 text-xs text-ink-secondary">KZT</span>
+        <span className="shrink-0 font-mono text-xs text-ink-muted">KZT</span>
       </div>
-      {business && <p className="mt-0.5 text-xs text-ink-secondary">{t("demoStand.accountant")} {sender.fullName}</p>}
-      <p className="mt-1.5 font-mono text-[clamp(1.65rem,2.4vw,2.25rem)] font-bold leading-tight tracking-tight tabular-nums">
+      {business && <p className="mt-1 text-xs text-ink-secondary">{t("demoStand.accountant")} {sender.fullName}</p>}
+      <p className="mt-3 font-mono text-[clamp(1.75rem,2.4vw,2.25rem)] font-medium leading-none tracking-[-0.01em] tabular-nums">
         {formatTenge(sender.balanceTenge)}
       </p>
-      <p className="mt-0.5 break-words font-mono text-xs tracking-wide tabular-nums text-ink-secondary">
+      <p className="mt-2 break-words font-mono text-xs tabular-nums text-ink-muted">
         {formatIban(sender.accountIban)}
       </p>
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-border-strong/80 pt-2 text-xs text-ink-secondary">
-        <span className="flex items-center gap-1">
-          <ShieldCheck aria-hidden="true" size={14} className="text-bcc" />
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-border-subtle pt-3 text-xs text-ink-secondary">
+        <span className="flex items-center gap-1.5">
+          <ShieldCheck aria-hidden="true" size={14} strokeWidth={1.75} className="text-bcc" />
           {business ? t("common.director") : t("common.secondHand")} · {cosigner.fullName}
         </span>
-        {!business && <span className="tabular-nums">{t("demoStand.deposit")} <strong className="font-mono font-semibold text-ink-primary">{formatTenge(sender.depositBalanceTenge)}</strong></span>}
+        {!business && <span className="tabular-nums">{t("demoStand.deposit")} <span className="font-mono text-ink-primary">{formatTenge(sender.depositBalanceTenge)}</span></span>}
       </div>
     </section>
   );
@@ -66,42 +62,42 @@ function AccountCard({ sender, cosigner, mode }: Pick<StandProps, "sender" | "co
 function DemoStandSkeleton() {
   const { t } = useT();
   return (
-    <main aria-busy="true" aria-label={t("demoStand.loading")} className="shell-container grid items-start gap-4 py-3 min-[1100px]:grid-cols-[minmax(0,45fr)_minmax(0,55fr)] 2xl:gap-5 2xl:py-5">
+    <main aria-busy="true" aria-label={t("demoStand.loading")} className="shell-container grid items-start gap-5 py-4 min-[1100px]:grid-cols-[minmax(0,45fr)_minmax(0,55fr)] 2xl:gap-6 2xl:py-6">
       <PhoneFrame className="mx-auto max-w-[560px] min-[1100px]:max-w-none">
-        <div className="space-y-2.5 p-2 md:px-3 md:pb-3 2xl:space-y-3 2xl:pb-4">
-          <Skeleton className="h-32 w-full rounded-2xl" />
-          <Skeleton className="h-9 w-full rounded-xl" />
+        <div className="space-y-3 p-1 md:px-4 md:pb-4">
+          <Skeleton className="h-32 w-full rounded-xl" />
+          <Skeleton className="h-9 w-full rounded-lg" />
           <div className="grid grid-cols-2 gap-2">
-            <Skeleton className="h-9 w-full rounded-[10px]" />
-            <Skeleton className="h-9 w-full rounded-[10px]" />
+            <Skeleton className="h-8 w-full rounded-lg" />
+            <Skeleton className="h-8 w-full rounded-lg" />
           </div>
-          <div className="grid gap-2.5 sm:grid-cols-2">
-            <Skeleton className="h-14 w-full rounded-xl" />
-            <Skeleton className="h-14 w-full rounded-xl" />
-            <Skeleton className="h-14 w-full rounded-xl" />
-            <Skeleton className="h-14 w-full rounded-xl" />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Skeleton className="h-16 w-full rounded-lg" />
+            <Skeleton className="h-16 w-full rounded-lg" />
+            <Skeleton className="h-16 w-full rounded-lg" />
+            <Skeleton className="h-16 w-full rounded-lg" />
           </div>
           <Skeleton className="h-24 w-full rounded-xl" />
-          <Skeleton className="h-12 w-full rounded-xl" />
+          <Skeleton className="h-11 w-full rounded-[10px]" />
         </div>
       </PhoneFrame>
-      <div className="space-y-2.5 2xl:space-y-3">
+      <div className="space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <Skeleton className="h-10 w-72 rounded-xl" />
-          <Skeleton className="h-6 w-20 rounded-full" />
+          <Skeleton className="h-9 w-72 rounded-[10px]" />
+          <Skeleton className="h-4 w-16" />
         </div>
-        <div className="grid gap-2.5 sm:grid-cols-2 2xl:gap-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           {Array.from({ length: 6 }).map((_, index) => (
-            <Card key={index} className="space-y-2 p-3.5">
+            <Card key={index} className="space-y-3">
               <Skeleton className="h-5 w-2/3" />
               <Skeleton className="h-8 w-full" />
-              <Skeleton className="h-9 w-36 rounded-[10px]" />
+              <Skeleton className="h-8 w-36 rounded-lg" />
             </Card>
           ))}
         </div>
-        <Card className="space-y-2.5 p-3.5">
+        <Card className="space-y-3">
           <Skeleton className="h-6 w-44" />
-          <Skeleton className="h-28 w-full rounded-xl" />
+          <Skeleton className="h-28 w-full rounded-lg" />
         </Card>
       </div>
     </main>
@@ -249,17 +245,18 @@ function DemoSession({ sender, cosigner, mode, presets, refresh }: StandProps) {
     purpose: "Бонус B+ (сайт-клон)",
   };
   const connection = { connecting: t("common.connecting"), live: "SSE Live", polling: t("common.polling"), offline: t("common.offline") };
+  const connectionTone = { connecting: "neutral", live: "success", polling: "warning", offline: "danger" } as const;
 
   return (
-    <main className="shell-container grid items-start gap-4 py-3 min-[1100px]:grid-cols-[minmax(0,45fr)_minmax(0,55fr)] 2xl:gap-5 2xl:py-5">
+    <main className="shell-container grid items-start gap-5 py-4 min-[1100px]:grid-cols-[minmax(0,45fr)_minmax(0,55fr)] 2xl:gap-6 2xl:py-6">
       <PhoneFrame className="mx-auto min-w-0 max-w-[560px] min-[1100px]:max-w-none">
-        <div className="space-y-2.5 p-1 md:px-3 md:pb-3 2xl:space-y-3 2xl:pb-4">
+        <div className="space-y-3 p-1 md:px-4 md:pb-4">
           <AccountCard sender={sender} cosigner={cosigner} mode={mode} />
           {cooling && (
-            <Card variant="warning" className="space-y-1 p-3">
-              <h2 className="flex items-center gap-2 type-h3"><Snowflake aria-hidden="true" size={17} /> {t("demoStand.cooling")}</h2>
-              <p className="text-xs text-ink-secondary sm:text-sm">
-                {t("demoStand.suspended")} <span className="font-mono tabular-nums">{new Date(coolingUntil).toLocaleString(region)}</span>.
+            <Card variant="warning" className="space-y-1">
+              <h2 className="flex items-center gap-2 type-h3"><Snowflake aria-hidden="true" size={16} strokeWidth={1.75} className="text-gold-text" /> {t("demoStand.cooling")}</h2>
+              <p className="text-[0.8125rem] text-ink-secondary">
+                {t("demoStand.suspended")} <span className="font-mono tabular-nums">{new Date(coolingUntil).toLocaleString(region)}</span>
               </p>
             </Card>
           )}
@@ -296,31 +293,24 @@ function DemoSession({ sender, cosigner, mode, presets, refresh }: StandProps) {
         </div>
       </PhoneFrame>
 
-      <aside className="min-w-0 space-y-2.5 2xl:space-y-3">
+      <aside className="min-w-0 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <SegmentedControl
             label={t("demoStand.panels")}
             value={tab}
             onChange={setTab}
-            className="min-w-0 max-w-full [&_button]:whitespace-normal [&_button]:px-3 [&_button]:py-1.5"
+            className="min-w-0 max-w-full [&_button]:whitespace-normal sm:[&_button]:whitespace-nowrap"
             options={[
               { value: "panel", label: t("demoStand.hacker") },
               {
                 value: "cosign",
-                label: (
-                  <span className="inline-flex items-center gap-1.5">
-                    <Users aria-hidden="true" size={14} />
-                    {t("demoStand.cosign")}
-                  </span>
-                ),
-                tone: "gold",
+                label: t("demoStand.cosign"),
                 badgeCount: record?.status === "PENDING_COSIGN" ? 1 : 0,
               },
             ]}
           />
-          <span role="status" className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-secondary">
-            <CircleDot aria-hidden="true" size={12} className={status === "live" ? "text-bcc motion-safe:animate-pulse" : "text-gold"} />
-            {connection[status]}
+          <span role="status">
+            <Badge tone={connectionTone[status]} className="font-mono font-normal">{connection[status]}</Badge>
           </span>
         </div>
 

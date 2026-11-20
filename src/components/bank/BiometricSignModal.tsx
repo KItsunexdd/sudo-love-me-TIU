@@ -1,8 +1,8 @@
 "use client";
 
 import { useT } from "@/components/shell/LocaleProvider";
-import { motion, useReducedMotion } from "framer-motion";
-import { Atom, CheckCircle2, Fingerprint, LockKeyhole, LockKeyholeOpen } from "lucide-react";
+import { useReducedMotion } from "framer-motion";
+import { Check, ChevronRight, Fingerprint, LoaderCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, Card, ErrorCard, HashChip, JsonDiffViewer, Modal } from "@/components/ui";
 import { api, type ApiError, type ApiResult, type ExecuteResponse, type PrepareResponse } from "@/lib/client/api";
@@ -10,72 +10,45 @@ import type { LocalDevice } from "@/lib/client/client-keystore";
 import { signPrimary, toClientError, type HybridSignature } from "@/lib/client/signer";
 import { buildExecuteBody, MITM_AMOUNT_TENGE, rememberValidPacket, useAttackState } from "@/components/hacker/attacks";
 import { formatIban, formatMs, formatTenge } from "@/lib/ui/format";
-import { lockSnapVariants, reducedMotionVariants } from "@/lib/ui/motion";
 
 type SignStage = "review" | "webauthn" | "mldsa" | "sending";
 
-function LockTile({
+function SignStep({
+  index,
   label,
   subtitle,
   state,
   timing,
-  quantum = false,
 }: {
+  index: number;
   label: string;
   subtitle: string;
   state: "idle" | "signing" | "signed";
   timing?: number;
-  quantum?: boolean;
 }) {
   const { t } = useT();
-  const reduce = useReducedMotion();
-  const Icon = state === "signed" ? LockKeyhole : quantum ? Atom : LockKeyholeOpen;
-  const toneClass = quantum
-    ? state === "signed"
-      ? "border-quantum/60 bg-quantum/[.12] text-quantum shadow-glow-quantum"
-      : state === "signing"
-        ? "border-quantum/55 bg-quantum/[.08] text-quantum"
-        : "border-border-default bg-terminal text-quantum"
-    : state === "signed"
-      ? "border-bcc/60 bg-bcc/[.12] text-bcc shadow-glow-bcc"
-      : state === "signing"
-        ? "border-bcc/55 bg-bcc/[.08] text-bcc shadow-glow-bcc"
-        : "border-border-default bg-terminal text-bcc";
-
   const statusText =
     state === "signed" && timing !== undefined
       ? t("biometricSignModal.signed", { value: formatMs(timing) })
       : state === "signing"
-        ? quantum
+        ? index === 2
           ? t("biometricSignModal.generating")
           : t("biometricSignModal.confirmDevice")
         : t("biometricSignModal.ready");
 
   return (
-    <div className={`relative overflow-hidden rounded-xl border p-3.5 transition-colors duration-200 ${toneClass}`}>
-      {quantum && state === "signing" && !reduce && (
-        <motion.span
-          aria-hidden="true"
-          initial={{ x: "-100%" }}
-          animate={{ x: "100%" }}
-          transition={{ duration: 0.45, repeat: Infinity, ease: "linear" }}
-          className="pointer-events-none absolute inset-y-0 left-0 w-1/2 bg-[linear-gradient(90deg,transparent,rgba(56,189,248,0.28),transparent)]"
-        />
-      )}
-      <div className="relative flex items-center justify-between gap-2">
-        <motion.div
-          variants={reduce ? reducedMotionVariants : lockSnapVariants}
-          animate={state}
-          className="inline-flex size-9 items-center justify-center rounded-lg border border-current/30 bg-black/25"
-        >
-          <Icon aria-hidden="true" size={20} />
-        </motion.div>
-        {state === "signed" && <CheckCircle2 aria-hidden="true" size={18} className="shrink-0" />}
-      </div>
-      <h3 className="relative mt-2.5 text-sm font-semibold text-ink-primary">{label}</h3>
-      <p className="relative text-xs text-ink-muted">{subtitle}</p>
-      <p className="relative mt-1.5 font-mono text-xs font-semibold tabular-nums text-ink-secondary">{statusText}</p>
-    </div>
+    <li className={`flex items-start gap-3 px-4 py-3 transition-colors ${state === "signing" ? "bg-elevated" : ""}`}>
+      <span aria-hidden="true" className="mt-0.5 grid size-5 shrink-0 place-items-center">
+        {state === "signed" ? <Check className="size-4 text-bcc" strokeWidth={2} />
+          : state === "signing" ? <LoaderCircle className="size-4 text-ink-secondary motion-safe:animate-spin" strokeWidth={1.75} />
+            : <span className="font-mono text-xs text-ink-muted">{index}</span>}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm text-ink-primary">{label}</span>
+        <span className="block text-xs text-ink-muted">{subtitle}</span>
+      </span>
+      <span className={`shrink-0 pt-0.5 font-mono text-xs tabular-nums ${state === "signed" ? "text-ink-secondary" : "text-ink-muted"}`}>{statusText}</span>
+    </li>
   );
 }
 
@@ -176,7 +149,7 @@ export function BiometricSignModal({ prepared, device, onClose, onComplete, onFa
       description={t("biometricSignModal.confirmHint")}
       footer={
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <span className="mono-data text-ink-secondary">
+          <span className="mono-data text-ink-muted">
             {remaining ? t("biometricSignModal.remaining", { value: Math.floor(remaining / 60), value2: String(remaining % 60).padStart(2, "0") }) : t("common.expired")}
           </span>
           <div className="flex flex-wrap items-center gap-2">
@@ -184,7 +157,7 @@ export function BiometricSignModal({ prepared, device, onClose, onComplete, onFa
             {!remaining ? <Button onClick={onRenew} disabled={busy}>{t("biometricSignModal.renew")}</Button> : <Button
               disabled={risk.requiresAcknowledgement && !ack}
               loading={busy}
-              icon={<Fingerprint size={18} />}
+              icon={<Fingerprint />}
               onClick={() => void sign()}
             >
               {software ? t("biometricSignModal.confirmSoftware") : t("biometricSignModal.confirmPasskey")}
@@ -193,62 +166,67 @@ export function BiometricSignModal({ prepared, device, onClose, onComplete, onFa
         </div>
       }
     >
-      <div className="space-y-4">
-        <Card className="space-y-3">
-          <dl className="grid gap-2 text-sm">
+      <div className="space-y-5">
+        <section className="rounded-xl border border-border-default bg-terminal">
+          <div className="px-5 pb-5 pt-4">
+            <p className="text-[0.8125rem] text-ink-secondary">{t("biometricSignModal.debit")}</p>
+            <p className="mt-2 font-mono text-[2.5rem] font-medium leading-none tracking-[-0.02em] tabular-nums text-ink-primary">
+              {formatTenge(payload.amountTenge)}
+            </p>
+          </div>
+          <dl className="grid gap-x-4 gap-y-2 border-t border-dashed border-border-strong px-5 py-4 text-sm sm:grid-cols-[8.5rem_minmax(0,1fr)]">
             {fields.map(({ label, value, mono }) => (
-              <div key={label} className="grid gap-1 sm:grid-cols-[8.5rem_1fr]">
+              <div key={label} className="contents">
                 <dt className="text-ink-muted">{label}</dt>
-                <dd className={`break-words font-semibold [overflow-wrap:anywhere] ${mono ? "font-mono tabular-nums text-ink-primary" : ""}`}>
+                <dd className={`break-words [overflow-wrap:anywhere] ${mono ? "font-mono tabular-nums" : ""}`}>
                   {value}
                 </dd>
               </div>
             ))}
           </dl>
-          <div className="border-t border-border-default pt-3">
-            <p className="type-label text-ink-muted">{t("biometricSignModal.debit")}</p>
-            <p className="font-mono text-[2rem] font-extrabold leading-tight tracking-tight tabular-nums text-ink-primary">
-              {formatTenge(payload.amountTenge)}
-            </p>
+          <div className="border-t border-dashed border-border-strong px-5 py-3">
+            <HashChip value={txHashHex} label={t("biometricSignModal.checksum")} />
           </div>
-          <HashChip value={txHashHex} label={t("biometricSignModal.checksum")} />
-          <details>
-            <summary className="cursor-pointer rounded text-sm font-medium text-ink-secondary hover:text-ink-primary">
-              {t("biometricSignModal.fields")}
-            </summary>
-            <JsonDiffViewer json={prepared.canonicalJson} className="mt-2" />
-          </details>
-        </Card>
+        </section>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <LockTile
+        <details className="group">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded text-[0.8125rem] text-ink-secondary transition-colors hover:text-ink-primary [&::-webkit-details-marker]:hidden">
+            <ChevronRight aria-hidden="true" className="size-4 transition-transform group-open:rotate-90" strokeWidth={1.75} />
+            {t("biometricSignModal.fields")}
+          </summary>
+          <JsonDiffViewer json={prepared.canonicalJson} className="mt-3" />
+        </details>
+
+        <ol className="divide-y divide-border-subtle overflow-hidden rounded-xl border border-border-default">
+          <SignStep
+            index={1}
             label={software ? t("biometricSignModal.lockSoftware") : t("biometricSignModal.lockPasskey")}
             subtitle={t("biometricSignModal.bound", { rpId: payload.rpId })}
             state={lock1State}
             timing={timings?.webauthnMs}
           />
-          <LockTile
-            quantum
+          <SignStep
+            index={2}
             label={t("biometricSignModal.lockPq")}
             subtitle={t("biometricSignModal.pqSize")}
             state={lock2State}
             timing={timings?.pqSignMs}
           />
-        </div>
+        </ol>
 
         {mitmIntercepted ? (
-          <p role="alert" className="rounded-xl border border-danger/55 bg-danger/15 px-3.5 py-2 text-sm font-semibold text-danger-text">
+          <p role="alert" className="rounded-lg border border-danger/45 bg-danger/[.08] px-4 py-3 text-sm text-danger-text">
             {t("biometricSignModal.intercepted")}
           </p>
         ) : stage === "sending" && (
-          <p role="status" className="text-sm font-medium text-bcc">
+          <p role="status" className="text-sm text-ink-secondary">
             {t("biometricSignModal.submitted")}
           </p>
         )}
 
         {risk.requiresAcknowledgement && (
           <Card variant="warning">
-            <h3 className="mb-2 type-h3">{t("biometricSignModal.warning")}</h3>
+            <h3 className="mb-3 type-h3">{t("biometricSignModal.warning")}</h3>
             <label className="flex cursor-pointer items-start gap-3 text-sm">
               <input
                 type="checkbox"
@@ -264,7 +242,7 @@ export function BiometricSignModal({ prepared, device, onClose, onComplete, onFa
 
         {armed && !mitmIntercepted && (
           <Card variant="danger" role="alert">
-            <p className="text-sm font-semibold text-danger-text">
+            <p className="text-sm text-danger-text">
               {t("biometricSignModal.armed")}
               {armed === "MITM_AMOUNT" ? t("biometricSignModal.amount", { value: formatTenge(MITM_AMOUNT_TENGE) }) : t("biometricSignModal.dropper")}).
             </p>
@@ -272,7 +250,7 @@ export function BiometricSignModal({ prepared, device, onClose, onComplete, onFa
         )}
 
         {risk.requiresCoSign && (
-          <p className="text-sm font-medium text-amber-300">
+          <p className="text-sm text-gold-text">
             {t("biometricSignModal.secondSignature")}
           </p>
         )}

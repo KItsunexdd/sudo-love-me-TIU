@@ -70,15 +70,15 @@ export function CosignDevicePanel({ userId }: { userId: string }) {
   }
 
   return (
-    <Card variant="elevated" className="space-y-3">
+    <Card className="space-y-3">
       <div className="flex items-center gap-2">
-        <KeyRound aria-hidden="true" className="size-4 text-bcc" />
+        <KeyRound aria-hidden="true" className="size-4 text-ink-muted" strokeWidth={1.75} />
         <h3 className="type-h3">{t("cosignDevicePanel.secondDevice")}</h3>
       </div>
       <p className="text-sm text-ink-secondary">{t("cosignDevicePanel.choose")}</p>
       <SegmentedControl label={t("cosignDevicePanel.method")} className="w-full" value={choice} options={keyOptions} onChange={setChoice} />
       {choice === "software" && <p className="text-xs text-ink-secondary">{t("cosignDevicePanel.https")}</p>}
-      <Button className="w-full" variant="secondary" loading={busy} icon={<Fingerprint className="size-4" />} onClick={() => void register()}>
+      <Button className="w-full" variant="secondary" loading={busy} icon={<Fingerprint />} onClick={() => void register()}>
         {t("common.enroll")}
       </Button>
       {error && <ErrorCard error={error} />}

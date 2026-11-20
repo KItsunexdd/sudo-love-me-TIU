@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useReducedMotion, useSpring } from "framer-motion";
+import { useEffect, useState } from "react";
+import { animate, useMotionValue, useMotionValueEvent, useReducedMotion } from "framer-motion";
+import { EASE_OUT } from "@/lib/ui/motion";
 
 interface SocAnimatedMetricProps {
   value: number;
@@ -19,41 +20,20 @@ export function SocAnimatedMetric({
   className = "",
 }: SocAnimatedMetricProps) {
   const reduce = useReducedMotion();
-  const safeValue = Number.isFinite(value) ? value : 0;
-  const targetRef = useRef(safeValue);
-  targetRef.current = safeValue;
-
-  const spring = useSpring(0, { stiffness: 180, damping: 26, mass: 0.7 });
-  const [display, setDisplay] = useState(reduce ? safeValue : 0);
+  const target = Number.isFinite(value) ? value : 0;
+  const current = useMotionValue(target);
+  const [display, setDisplay] = useState(target);
+  useMotionValueEvent(current, "change", setDisplay);
 
   useEffect(() => {
-    if (isEmpty) return;
-    if (reduce) {
-      spring.jump(safeValue);
-      setDisplay(safeValue);
+    if (reduce || isEmpty) {
+      current.jump(target);
       return;
     }
-    spring.set(safeValue);
-  }, [isEmpty, reduce, safeValue, spring]);
+    if (current.get() === target) return;
+    const tween = animate(current, target, { type: "tween", duration: 0.5, ease: EASE_OUT });
+    return () => tween.stop();
+  }, [current, isEmpty, reduce, target]);
 
-  useEffect(() => {
-    const unsubChange = spring.on("change", latest => {
-      const target = targetRef.current;
-      const epsilon = Math.max(0.01, Math.abs(target) * 0.002);
-      setDisplay(Math.abs(latest - target) <= epsilon ? target : latest);
-    });
-    const unsubFinish = spring.on("animationComplete", () => {
-      setDisplay(targetRef.current);
-    });
-    return () => {
-      unsubChange();
-      unsubFinish();
-    };
-  }, [spring]);
-
-  if (isEmpty) {
-    return <span className={`tabular-nums ${className}`}>{emptyText}</span>;
-  }
-
-  return <span className={`tabular-nums ${className}`}>{format(display)}</span>;
+  return <span className={`tabular-nums ${className}`}>{isEmpty ? emptyText : format(reduce ? target : display)}</span>;
 }

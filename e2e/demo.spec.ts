@@ -131,7 +131,7 @@ test("Сценарий защиты BCC SafeSign", async ({ baseURL }) => {
     await expect(main.getByText("Software #2", { exact: true })).toBeVisible();
 
     const timeOrigin = await page.evaluate(() => performance.timeOrigin);
-    await incoming.getByRole("button", { name: "Отклонить — это мошенники!" }).click();
+    await incoming.getByRole("button", { name: "Отклонить — это мошенники" }).click();
     await expect(main.getByRole("heading", { name: "Вторая рука остановила операцию" })).toBeVisible();
     expect(await page.evaluate(() => performance.timeOrigin)).toBe(timeOrigin);
     await expect(balanceAfterTransfer).toBeVisible();

@@ -12,7 +12,7 @@ import type { Mode } from "@/lib/db/types";
 
 const getProfiles = (t: Translate) => ([
   { value: "B2C", label: t("common.trusted") },
-  { value: "B2B", label: t("common.director"), tone: "gold" },
+  { value: "B2B", label: t("common.director") },
 ] as const satisfies readonly Segment<Mode>[]);
 
 export function CosignCabinet() {
@@ -52,18 +52,18 @@ export function CosignPageSkeleton() {
   return (
     <div aria-busy="true" aria-label={t("cosign.opening")} className="space-y-3">
       <div className="flex items-center gap-3">
-        <Skeleton className="size-10 rounded-xl" />
+        <Skeleton className="size-9 rounded-full" />
         <div className="flex-1 space-y-1.5">
           <Skeleton className="h-4 w-36" />
           <Skeleton className="h-3.5 w-48" />
         </div>
       </div>
-      <Skeleton className="h-10 w-full rounded-xl" />
+      <Skeleton className="h-9 w-full rounded-[10px]" />
       <Card className="space-y-3">
-        <Skeleton className="h-14 w-full rounded-xl" />
-        <Skeleton className="h-24 w-full rounded-xl" />
-        <Skeleton className="h-12 w-full rounded-[14px]" />
-        <Skeleton className="h-12 w-full rounded-[14px]" />
+        <Skeleton className="h-14 w-full rounded-lg" />
+        <Skeleton className="h-24 w-full rounded-lg" />
+        <Skeleton className="h-11 w-full rounded-[10px]" />
+        <Skeleton className="h-11 w-full rounded-[10px]" />
       </Card>
     </div>
   );

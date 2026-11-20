@@ -38,8 +38,8 @@ function renderDiffValue(field: string, value: string) {
     if (Number.isFinite(parsed)) {
       return (
         <span className="inline-flex flex-wrap items-baseline gap-1.5">
-          <strong className="font-sans font-bold tabular-nums">{formatTenge(parsed)}</strong>
-          <code className="rounded bg-black/35 px-1.5 py-0.5 font-mono text-xs tabular-nums opacity-90">{raw}</code>
+          <span className="font-sans font-medium tabular-nums">{formatTenge(parsed)}</span>
+          <code className="font-mono text-xs tabular-nums opacity-70">{raw}</code>
         </span>
       );
     }
@@ -47,7 +47,7 @@ function renderDiffValue(field: string, value: string) {
   if (field === "recipientAccount" || field === "senderAccount") {
     return (
       <span className="inline-flex flex-wrap items-baseline gap-1.5">
-        <code className="font-mono font-semibold" title={raw}>{raw.includes("\\u") ? raw : formatIban(raw)}</code>
+        <code className="font-mono" title={raw}>{raw.includes("\\u") ? raw : formatIban(raw)}</code>
       </span>
     );
   }
@@ -71,14 +71,14 @@ function JsonSyntax({ text }: { text: string }) {
       lastKey = key;
       const critical = criticalFields.has(key);
       pieces.push(
-        <span key={start} className={critical ? "rounded bg-quantum/[.12] px-0.5 text-sky-300" : "text-ink-muted"}>{quoted}</span>,
+        <span key={start} className={critical ? "text-ink-secondary" : "text-ink-muted"}>{quoted}</span>,
         colon,
       );
     } else {
       const isAmountNumber = lastKey === "amountTenge" && !quoted && /^-?\d+(?:\.\d+)?$/.test(token);
       const parsedAmount = isAmountNumber ? Number(token) : Number.NaN;
       pieces.push(
-        <span key={start} className={quoted ? "text-emerald-200" : "tabular-nums text-amber-300"}>
+        <span key={start} className={quoted ? "text-ink-primary" : "tabular-nums text-ink-primary"}>
           {token}
         </span>,
       );
@@ -86,7 +86,7 @@ function JsonSyntax({ text }: { text: string }) {
         pieces.push(
           <span
             key={`${start}-fmt`}
-            className="ml-2 inline-block rounded bg-bcc/[.12] px-1.5 py-0.5 font-sans text-xs font-semibold tabular-nums text-emerald-300"
+            className="ml-3 inline-block font-sans text-xs tabular-nums text-ink-muted"
           >
             {formatTenge(parsedAmount)}
           </span>,
@@ -106,9 +106,9 @@ export function JsonDiffViewer({ value, json, tamperDiff = [], signedHash, recei
   const { t } = useT();
   const fieldLabels = getFieldLabels(t);
   return (
-    <div className={`min-w-0 overflow-hidden rounded-xl border border-border-default bg-terminal p-3.5 font-mono text-[13px] leading-relaxed ${className}`}>
+    <div className={`min-w-0 overflow-hidden rounded-xl border border-border-default bg-terminal p-4 font-mono text-[0.8125rem] leading-relaxed ${className}`}>
       {(signedHash || receivedHash) && (
-        <div className="mb-3 flex flex-wrap items-center gap-2">
+        <div className="mb-4 flex flex-wrap items-center gap-2">
           {signedHash && <HashChip value={signedHash} label={t("jsonDiffViewer.signedHash")} />}
           {receivedHash && <HashChip value={receivedHash} label={t("jsonDiffViewer.receivedHash")} tone={signedHash === receivedHash ? "success" : "danger"} />}
           {signedHash && receivedHash && signedHash !== receivedHash && <Badge tone="danger">{t("jsonDiffViewer.different")}</Badge>}
@@ -118,20 +118,22 @@ export function JsonDiffViewer({ value, json, tamperDiff = [], signedHash, recei
         <ul className="space-y-3">
           {tamperDiff.map(({ field, original, tampered }) => (
             <li key={field} className="space-y-1.5">
-              <div className="flex flex-wrap items-center gap-2 text-xs text-ink-muted">
-                {fieldLabels[field] && <span className="font-sans font-semibold text-ink-secondary">{fieldLabels[field]}</span>}
-                <code className="break-all rounded bg-surface px-1.5 py-0.5 font-mono">{field}</code>
+              <div className="flex flex-wrap items-baseline gap-2 text-xs text-ink-muted">
+                {fieldLabels[field] && <span className="font-sans text-ink-secondary">{fieldLabels[field]}</span>}
+                <code className="break-all font-mono">{field}</code>
               </div>
-              <div className="flex flex-wrap items-center gap-2 rounded-lg border-l-[3px] border-bcc bg-bcc/10 px-3 py-2 text-emerald-200 [overflow-wrap:anywhere]">
-                <span className="font-sans text-xs font-semibold uppercase tracking-wide text-bcc">{t("jsonDiffViewer.signed")}</span>
+              <div className="grid grid-cols-[minmax(0,7.5rem)_minmax(0,1fr)] items-baseline gap-3 rounded-lg border border-border-default bg-surface px-3 py-2 text-ink-primary [overflow-wrap:anywhere]">
+                <span className="flex items-center gap-1.5 font-sans text-xs text-ink-muted">
+                  <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-bcc" />{t("jsonDiffViewer.signed")}
+                </span>
                 {renderDiffValue(field, original)}
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border-l-[3px] border-danger bg-danger/[.18] px-3 py-2 text-danger-text">
-                <span className="flex flex-wrap items-center gap-2 [overflow-wrap:anywhere]">
-                  <span className="font-sans text-xs font-semibold uppercase tracking-wide">{t("jsonDiffViewer.tampered")}</span>
-                  {renderDiffValue(field, tampered)}
+              <div className="grid grid-cols-[minmax(0,7.5rem)_minmax(0,1fr)_auto] items-baseline gap-3 rounded-lg border border-danger/45 bg-danger/[.08] px-3 py-2 text-danger-text [overflow-wrap:anywhere]">
+                <span className="flex items-center gap-1.5 font-sans text-xs">
+                  <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-danger" />{t("jsonDiffViewer.tampered")}
                 </span>
-                <Badge tone="danger">{t("jsonDiffViewer.changed")}</Badge>
+                {renderDiffValue(field, tampered)}
+                <Badge tone="danger" dot={false}>{t("jsonDiffViewer.changed")}</Badge>
               </div>
             </li>
           ))}

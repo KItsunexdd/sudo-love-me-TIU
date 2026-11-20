@@ -11,7 +11,7 @@ interface RoiSliderFieldProps {
   max: number;
   step: number;
   unit: string;
-  /** Масштаб для поля ручного ввода (например, 1_000_000 для ввода в млн ₸) */
+  /** Base units per unit displayed in the number input. */
   inputScale?: number;
   inputUnit?: string;
   formatValue: (value: number) => string;
@@ -33,7 +33,6 @@ export function RoiSliderField({
   inputUnit,
   formatValue,
   formatBound,
-  tone = "emerald",
   onChange,
 }: RoiSliderFieldProps) {
   const sliderId = useId();
@@ -41,17 +40,7 @@ export function RoiSliderField({
   const [draft, setDraft] = useState<string | null>(null);
 
   const clampedForTrack = Math.min(max, Math.max(min, value));
-  const percent = max > min ? ((clampedForTrack - min) / (max - min)) * 100 : 0;
-
-  const isGold = tone === "gold";
-  const accentFill = isGold ? "bg-gold" : "bg-bcc";
-  const accentBadge = isGold
-    ? "border-gold/40 bg-gold/15 text-amber-300"
-    : "border-bcc/40 bg-bcc/[.12] text-emerald-300";
-  const thumbShadow = isGold
-    ? "border-gold bg-[#04120D] shadow-glow-gold"
-    : "border-bcc bg-[#04120D] shadow-glow-bcc";
-  const dotColor = isGold ? "bg-gold" : "bg-bcc";
+  const share = max > min ? (clampedForTrack - min) / (max - min) : 0;
 
   const scaledValue = value / inputScale;
   const displayInput = draft ?? String(Number(scaledValue.toFixed(2)));
@@ -69,53 +58,46 @@ export function RoiSliderField({
   }
 
   return (
-    <div className="space-y-2.5">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <label htmlFor={sliderId} className="flex items-center gap-2 text-sm font-semibold text-ink-primary">
-            <span className={`inline-flex size-6 shrink-0 items-center justify-center rounded-md border font-mono text-xs font-bold ${accentBadge}`}>
-              {symbol}
-            </span>
-            <span className="leading-snug">{label}</span>
+    <div>
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1">
+        <label htmlFor={sliderId} className="flex min-h-8 items-center gap-2 text-sm font-medium text-ink-primary">
+          <span className="w-3 shrink-0 font-mono text-xs font-normal text-ink-muted">{symbol}</span>
+          <span>{label}</span>
+        </label>
+        <div className="flex h-8 items-center gap-1 rounded-lg border border-border-default bg-elevated px-2 transition-colors hover:border-border-strong focus-within:border-bcc">
+          <label htmlFor={numberId} className="sr-only">
+            {label} ({inputUnit ?? unit})
           </label>
-          {hint && <p className="mt-0.5 pl-8 text-xs text-ink-muted">{hint}</p>}
-        </div>
-
-        <div className="flex shrink-0 items-center gap-1.5">
-          <div className="flex items-center rounded-xl border border-border-default bg-terminal px-2.5 py-1 transition-colors hover:border-border-strong focus-within:border-bcc/70 focus-within:ring-2 focus-within:ring-bcc/45">
-            <label htmlFor={numberId} className="sr-only">
-              {label} ({inputUnit ?? unit})
-            </label>
-            <input
-              id={numberId}
-              type="number"
-              inputMode="decimal"
-              min={0}
-              max={scaledMax * 2}
-              step={scaledStep}
-              value={displayInput}
-              onFocus={() => setDraft(String(Number(scaledValue.toFixed(2))))}
-              onChange={event => {
-                const nextText = event.target.value;
-                setDraft(nextText);
-                commitNumber(nextText);
-              }}
-              onBlur={() => {
-                if (draft !== null) {
-                  const normalized = draft.replace(/\s+/g, "").replace(",", ".");
-                  const parsed = Number(normalized);
-                  if (Number.isFinite(parsed)) {
-                    const bounded = Math.min(max, Math.max(min, parsed * inputScale));
-                    onChange(Math.round(bounded));
-                  }
+          <input
+            id={numberId}
+            type="number"
+            inputMode="decimal"
+            min={0}
+            max={scaledMax * 2}
+            step={scaledStep}
+            value={displayInput}
+            onFocus={() => setDraft(String(Number(scaledValue.toFixed(2))))}
+            onChange={event => {
+              const nextText = event.target.value;
+              setDraft(nextText);
+              commitNumber(nextText);
+            }}
+            onBlur={() => {
+              if (draft !== null) {
+                const normalized = draft.replace(/\s+/g, "").replace(",", ".");
+                const parsed = Number(normalized);
+                if (Number.isFinite(parsed)) {
+                  const bounded = Math.min(max, Math.max(min, parsed * inputScale));
+                  onChange(Math.round(bounded));
                 }
-                setDraft(null);
-              }}
-              className="w-24 bg-transparent text-right font-mono text-sm font-semibold tabular-nums text-ink-primary outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-            />
-            <span className="ml-1.5 select-none font-mono text-xs text-ink-muted">{inputUnit ?? unit}</span>
-          </div>
+              }
+              setDraft(null);
+            }}
+            className="w-[8ch] rounded-sm bg-transparent text-right font-mono text-sm tabular-nums text-ink-primary [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          />
+          <span className="select-none whitespace-nowrap font-mono text-xs text-ink-muted">{inputUnit ?? unit}</span>
         </div>
+        {hint && <p className="type-micro col-span-2 pl-5 text-ink-muted">{hint}</p>}
       </div>
 
       <div className="relative flex h-7 items-center">
@@ -134,25 +116,18 @@ export function RoiSliderField({
           className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
         />
 
-        <div aria-hidden="true" className="relative h-2 w-full overflow-hidden rounded-full border border-border-default bg-terminal peer-focus-visible:ring-2 peer-focus-visible:ring-bcc/80 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-surface">
-          <div
-            className={`h-full rounded-full transition-[width] duration-75 ${accentFill}`}
-            style={{ width: `${percent}%` }}
+        <div aria-hidden="true" className="pointer-events-none relative mx-1.5 h-0.5 flex-1 bg-border-strong peer-focus-visible:ring-2 peer-focus-visible:ring-bcc peer-focus-visible:ring-offset-4 peer-focus-visible:ring-offset-surface">
+          <div className="h-full origin-left bg-bcc" style={{ transform: `scaleX(${share})` }} />
+          <span
+            className="absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-bcc"
+            style={{ left: `${share * 100}%` }}
           />
-        </div>
-
-        <div
-          aria-hidden="true"
-          className={`pointer-events-none absolute top-1/2 grid size-[22px] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 transition-[left,transform] duration-75 peer-focus-visible:scale-110 ${thumbShadow}`}
-          style={{ left: `${percent}%` }}
-        >
-          <span className={`size-2 rounded-full ${dotColor}`} />
         </div>
       </div>
 
-      <div className="flex items-center justify-between font-mono text-xs tabular-nums text-ink-muted">
+      <div className="flex items-baseline justify-between gap-2 font-mono text-xs tabular-nums text-ink-muted">
         <span>{formatBound(min)}</span>
-        <span className="font-semibold text-ink-secondary">{formatValue(value)}</span>
+        <span className="text-center text-ink-secondary">{formatValue(value)}</span>
         <span>{formatBound(max)}</span>
       </div>
     </div>

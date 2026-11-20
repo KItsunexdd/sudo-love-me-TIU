@@ -13,6 +13,7 @@ import { useDemoState } from "@/lib/client/useDemoState";
 import type { ConnectionStatus } from "@/lib/client/useEventStream";
 import { failureMessages, type Mode, type TransactionRecord } from "@/lib/db/types";
 import { formatIban, formatTenge } from "@/lib/ui/format";
+import { TWEEN_ENTER } from "@/lib/ui/motion";
 import { CosignDevicePanel, useCosignDevice } from "./CosignDevicePanel";
 import { CosignRequestCard, CosignSignatureChain } from "./CosignRequestCard";
 import { selectCosigner, signatureHash } from "./cosignDetails";
@@ -49,28 +50,28 @@ function DecisionResult({ decision, coolingOffActive }: { decision: SuccessfulDe
   const corporate = transaction.payload.mode === "B2B";
   return (
     <motion.div
-      initial={reduce ? false : { opacity: 0, scale: 0.97 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: reduce ? 0 : 0.28 }}
+      initial={reduce ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={reduce ? { duration: 0 } : TWEEN_ENTER}
     >
-      <Card variant="success" role="status" className="space-y-3">
-        <div className="flex items-center gap-3">
-          <span className="grid size-11 shrink-0 place-items-center rounded-xl border border-bcc/35 bg-bcc/15 text-bcc">
-            {blocked ? <ShieldX aria-hidden="true" className="size-6" /> : <BadgeCheck aria-hidden="true" className="size-6" />}
-          </span>
+      <Card variant="success" role="status" className="space-y-4">
+        <div className="flex items-start gap-3">
+          {blocked
+            ? <ShieldX aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-bcc" strokeWidth={1.75} />
+            : <BadgeCheck aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-bcc" strokeWidth={1.75} />}
           <div className="min-w-0">
             <h2 className="type-h2 break-words tabular-nums">
               {blocked ? corporate ? t("cosignFeed.rejected") :
                 t("cosignFeed.saved", { value: formatTenge(decision.savedAmountTenge ?? transaction.payload.amountTenge) }) : t("cosignFeed.signed")}
             </h2>
-            <p className="mt-0.5 break-words text-sm tabular-nums text-ink-secondary">
+            <p className="mt-1 break-words text-sm tabular-nums text-ink-secondary">
               {transaction.payload.recipientName} · <span className="font-mono">{formatTenge(transaction.payload.amountTenge)}</span>
             </p>
           </div>
         </div>
         {blocked ? (
-          <div className="flex flex-wrap items-center gap-2">
-            {transaction.status === status && <time className="mono-data text-ink-secondary" dateTime={transaction.updatedAt}>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            {transaction.status === status && <time className="mono-data text-ink-muted" dateTime={transaction.updatedAt}>
               {formatDecisionTime(transaction.updatedAt, region)}
             </time>}
             {coolingOffActive && <Badge tone="warning">{t("cosignFeed.cooling")}</Badge>}
@@ -84,15 +85,15 @@ function DecisionResult({ decision, coolingOffActive }: { decision: SuccessfulDe
 function DecisionHistory({ transactions }: { transactions: TransactionRecord[] }) {
   const { t, region } = useT();
   return (
-    <section className="space-y-2">
+    <section className="space-y-3">
       <h2 className="type-h3 text-ink-secondary">{t("cosignFeed.history")}</h2>
       {transactions.length === 0 ? <p className="text-sm text-ink-muted">{t("cosignFeed.emptyHistory")}</p> : (
-        <ul className="divide-y divide-border-subtle rounded-2xl border border-border-default bg-surface px-3.5">
+        <ul className="divide-y divide-border-subtle rounded-xl border border-border-default bg-surface px-4">
           {transactions.map(tx => (
-            <li key={tx.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+            <li key={tx.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
               <div className="min-w-0">
-                <p className="break-words text-sm font-semibold text-ink-primary">{tx.payload.recipientName}</p>
-                <p className="mono-data text-xs text-ink-secondary">{formatTenge(tx.payload.amountTenge)} · <time dateTime={tx.updatedAt}>{formatDecisionTime(tx.updatedAt, region)}</time></p>
+                <p className="break-words text-sm text-ink-primary">{tx.payload.recipientName}</p>
+                <p className="mt-0.5 font-mono text-xs tabular-nums text-ink-muted">{formatTenge(tx.payload.amountTenge)} · <time dateTime={tx.updatedAt}>{formatDecisionTime(tx.updatedAt, region)}</time></p>
               </div>
               {tx.status === "BLOCKED_BY_COSIGNER"
                 ? <Badge tone="danger">{tx.payload.mode === "B2B" ? t("cosignFeed.rejected") : t("cosignFeed.stopped")}</Badge>
@@ -109,10 +110,10 @@ function FeedSkeleton() {
   const { t } = useT();
   return (
     <Card aria-busy="true" aria-label={t("cosignFeed.loading")} className="space-y-3">
-      <Skeleton className="h-12 w-full rounded-xl" />
-      <Skeleton className="h-20 w-full rounded-xl" />
-      <Skeleton className="h-11 w-full rounded-xl" />
-      <Skeleton className="h-11 w-full rounded-xl" />
+      <Skeleton className="h-12 w-full rounded-lg" />
+      <Skeleton className="h-20 w-full rounded-lg" />
+      <Skeleton className="h-11 w-full rounded-lg" />
+      <Skeleton className="h-11 w-full rounded-lg" />
     </Card>
   );
 }
@@ -220,37 +221,34 @@ export function CosignFeed({ userId, mode, compact = false, hideConnectionBadge 
   }
 
   return (
-    <div className={`min-w-0 ${compact ? "space-y-2.5 p-2.5" : "space-y-3"}`}>
+    <div className={`min-w-0 ${compact ? "space-y-3 p-3" : "space-y-4"}`}>
       <header className="space-y-2">
         <div className="flex items-center justify-between gap-2.5">
           <div className="flex min-w-0 items-center gap-2.5">
-            <span aria-hidden="true" className={`grid size-9 shrink-0 place-items-center rounded-xl border text-sm font-bold ${corporate ? "border-gold/40 bg-gold/10 text-gold" : "border-bcc/40 bg-bcc/10 text-bcc"}`}>
+            <span aria-hidden="true" className="grid size-9 shrink-0 place-items-center rounded-full border border-border-default bg-elevated text-[0.8125rem] font-medium text-ink-secondary">
               {initials}
             </span>
             <div className="min-w-0">
               {compact ? (
-                <h2 className="truncate text-sm font-bold leading-tight">{profileName}</h2>
+                <h2 className="truncate text-sm font-medium leading-5">{profileName}</h2>
               ) : (
-                <h1 className="truncate text-base font-bold leading-tight sm:text-lg">{profileName}</h1>
+                <h1 className="truncate text-base font-medium leading-6 sm:text-lg">{profileName}</h1>
               )}
-              <p className="truncate text-xs text-ink-secondary">
+              <p className="truncate text-xs text-ink-muted">
                 {t("cosignFeed.role")} {corporate ? t("common.director") : t("common.trusted")}
               </p>
             </div>
           </div>
 
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-x-3 gap-y-1">
             {device && (
-              <Badge status={device.deviceKind} className="px-2 py-0.5 text-xs">
+              <Badge status={device.deviceKind}>
                 {device.deviceKind === "PLATFORM_PASSKEY" ? "Passkey #2" : "Software #2"}
               </Badge>
             )}
             {!hideConnectionBadge && (
               <span role="status">
-                <Badge tone={connectionTone} className="px-2 py-0.5 text-xs">
-                  <span aria-hidden="true" className={`size-1.5 rounded-full bg-current ${feed.status === "live" ? "motion-safe:animate-pulse" : ""}`} />
-                  {connectionLabel}
-                </Badge>
+                <Badge tone={connectionTone} className="font-mono font-normal">{connectionLabel}</Badge>
               </span>
             )}
           </div>
@@ -273,7 +271,7 @@ export function CosignFeed({ userId, mode, compact = false, hideConnectionBadge 
         <>
           {showOutcome && <DecisionResult key={outcome.transaction.id} decision={outcome} coolingOffActive={coolingOffActive} />}
           {pending.length > 0 && clock ? (
-            <section className="space-y-2.5" aria-label={t("cosignFeed.incoming")}>
+            <section className="space-y-3" aria-label={t("cosignFeed.incoming")}>
               <AnimatePresence initial={false}>
                 {pending.map((tx, index) => (
                   <CosignRequestCard
@@ -310,7 +308,7 @@ export function CosignFeed({ userId, mode, compact = false, hideConnectionBadge 
                   title={corporate ? t("cosignFeed.noPayments") : t("common.allClear")}
                   description={corporate ? t("cosignDetails.corporate") : t("cosignFeed.confirmHint")}
                   action={compact ? undefined : (
-                    <Link className="rounded-lg text-sm font-semibold text-bcc hover:underline" href={`/?mode=${mode}&lang=${locale}`}>
+                    <Link className="rounded-lg text-sm font-medium text-bcc underline-offset-4 hover:underline" href={`/?mode=${mode}&lang=${locale}`}>
                       {t("cosignFeed.openDemo")}
                     </Link>
                   )}

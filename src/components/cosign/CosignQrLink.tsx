@@ -59,16 +59,16 @@ export function CosignQrLink({ cosignerUserId, mode, origin, className }: {
   return (
     <Card className={`space-y-3 ${className ?? ""}`}>
       <div className="flex items-center gap-2">
-        <QrCode aria-hidden="true" className="size-5 shrink-0 text-bcc" />
+        <QrCode aria-hidden="true" className="size-[18px] shrink-0 text-ink-muted" strokeWidth={1.75} />
         <h2 className="type-h3">{t("cosignQrLink.connect")}</h2>
       </div>
       {modules && <QrCanvas modules={modules} />}
       <a href={absolute ?? path} target="_blank" rel="noreferrer"
-        className="inline-flex items-center gap-2 rounded text-sm font-semibold text-bcc hover:underline">
+        className="inline-flex items-center gap-2 rounded text-sm font-medium text-bcc underline-offset-4 hover:underline">
         {t("cosignQrLink.open")} <ExternalLink aria-hidden="true" className="size-4 shrink-0" />
       </a>
-      {loopback && <p className="text-xs text-gold">{t("cosignQrLink.loopback")}</p>}
-      {url && !loopback && url.protocol === "http:" && <p className="text-xs text-gold">{t("cosignQrLink.http")}</p>}
+      {loopback && <p className="text-xs text-gold-text">{t("cosignQrLink.loopback")}</p>}
+      {url && !loopback && url.protocol === "http:" && <p className="text-xs text-gold-text">{t("cosignQrLink.http")}</p>}
       <p className="text-xs text-ink-secondary">{t("cosignQrLink.https")}</p>
     </Card>
   );

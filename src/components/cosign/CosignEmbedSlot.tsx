@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ExternalLink, QrCode, Smartphone } from "lucide-react";
+import { ExternalLink, QrCode } from "lucide-react";
 import { Button, ErrorCard, Modal, PhoneFrame, Skeleton } from "@/components/ui";
 import { useDemoMode } from "@/components/shell/DemoModeProvider";
 
@@ -32,11 +32,11 @@ function SecondPhoneTrigger({ cosignerUserId }: { cosignerUserId: string }) {
 
   return (
     <>
-      <div className="mx-auto flex w-full max-w-[400px] flex-wrap items-center justify-between gap-2 rounded-2xl border border-border-default bg-surface px-3.5 py-2.5">
+      <div className="mx-auto flex w-full max-w-[400px] flex-wrap items-center justify-between gap-2 rounded-xl border border-border-default bg-surface px-4 py-3">
         <Button
           size="sm"
           variant="secondary"
-          icon={<QrCode className="size-4 text-bcc" />}
+          icon={<QrCode />}
           onClick={() => setOpen(true)}
         >
           {t("cosignEmbedSlot.openPhone")}
@@ -45,10 +45,10 @@ function SecondPhoneTrigger({ cosignerUserId }: { cosignerUserId: string }) {
           href={href}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex min-h-9 items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-[13px] font-semibold text-bcc transition-colors hover:bg-surface-hover hover:underline"
+          className="inline-flex min-h-8 items-center gap-1.5 rounded-lg px-2.5 font-mono text-[0.8125rem] text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink-primary"
         >
           <span>/cosign</span>
-          <ExternalLink aria-hidden="true" className="size-3.5" />
+          <ExternalLink aria-hidden="true" className="size-3.5" strokeWidth={1.75} />
         </Link>
       </div>
 
@@ -63,18 +63,15 @@ function SecondPhoneTrigger({ cosignerUserId }: { cosignerUserId: string }) {
               href={href}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex min-h-9 items-center gap-1.5 rounded-[10px] text-sm font-semibold text-bcc hover:underline"
+              className="inline-flex min-h-8 items-center gap-1.5 rounded-lg text-sm font-medium text-bcc underline-offset-4 hover:underline"
             >
-              {t("cosignEmbedSlot.newTab")} <ExternalLink aria-hidden="true" className="size-4" />
+              {t("cosignEmbedSlot.newTab")} <ExternalLink aria-hidden="true" className="size-4" strokeWidth={1.75} />
             </Link>
             <Button size="sm" variant="secondary" onClick={() => setOpen(false)}>{t("common.close")}</Button>
           </div>
         }
       >
         <div className="grid justify-items-center gap-4 text-center">
-          <span className="grid size-11 place-items-center rounded-xl border border-gold/40 bg-gold/10 text-gold">
-            <Smartphone aria-hidden="true" className="size-5" />
-          </span>
           {image ? (
             <Image
               unoptimized
@@ -82,12 +79,12 @@ function SecondPhoneTrigger({ cosignerUserId }: { cosignerUserId: string }) {
               height={200}
               alt={t("cosignEmbedSlot.qr")}
               src={image}
-              className="rounded-xl border border-border-strong bg-white p-1"
+              className="rounded-lg bg-white p-1"
             />
           ) : error ? (
             <ErrorCard error={{ failureCode: "ERR_QR", message: t("cosignEmbedSlot.qrError") }} />
           ) : (
-            <Skeleton className="size-[200px] rounded-xl" />
+            <Skeleton className="size-[200px] rounded-lg" />
           )}
           <p className="max-w-sm text-xs leading-relaxed text-ink-secondary">
             {t("cosignEmbedSlot.publicLink")}
@@ -103,14 +100,14 @@ function EmbedSkeleton() {
   return (
     <PhoneFrame preset="compact">
       <div aria-busy="true" aria-label={t("cosignEmbedSlot.opening")} className="space-y-3 p-3">
-        <div className="flex items-center gap-2.5">
-          <Skeleton className="size-9 rounded-xl" />
+        <div className="flex items-center gap-3">
+          <Skeleton className="size-9 rounded-full" />
           <div className="flex-1 space-y-1.5">
             <Skeleton className="h-4 w-32" />
             <Skeleton className="h-3 w-44" />
           </div>
         </div>
-        <Skeleton className="h-32 w-full rounded-xl" />
+        <Skeleton className="h-32 w-full rounded-lg" />
       </div>
     </PhoneFrame>
   );
@@ -130,7 +127,7 @@ const Live = dynamic<{ cosignerUserId: string }>(async () => {
 
 export function CosignEmbedSlot({ userId }: { userId: string }) {
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-3">
       <Live cosignerUserId={userId} />
       <SecondPhoneTrigger cosignerUserId={userId} />
     </div>

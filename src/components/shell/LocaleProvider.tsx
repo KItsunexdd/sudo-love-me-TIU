@@ -80,12 +80,12 @@ export function useT() {
 export function LocaleSwitch() {
   const { locale, setLocale } = useT();
   return (
-    <div role="group" aria-label="Язык / Тіл" className="inline-flex shrink-0 rounded-xl border border-border-strong p-0.5">
+    <div role="group" aria-label="Язык / Тіл" className="inline-flex shrink-0 gap-0.5 rounded-[10px] border border-border-default bg-terminal p-0.5">
       {(["ru", "kk"] as const).map(option => (
         <button type="button" key={option} lang={option} aria-pressed={locale === option}
           aria-label={option === "ru" ? "РУС · Русский / Орыс тілі" : "ҚАЗ · Қазақ тілі / Казахский"}
           onClick={() => setLocale(option)}
-          className={`min-h-8 rounded-lg px-2 text-xs font-semibold ${locale === option ? "bg-elevated text-bcc" : "text-ink-secondary"}`}>
+          className={`min-h-8 rounded-lg px-2.5 font-mono text-xs transition-colors ${locale === option ? "bg-elevated text-ink-primary shadow-highlight" : "text-ink-muted hover:text-ink-primary"}`}>
           {option === "ru" ? "РУС" : "ҚАЗ"}
         </button>
       ))}

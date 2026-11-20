@@ -1,19 +1,20 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import { headers } from "next/headers";
 import type { ReactNode } from "react";
 import { AppProviders } from "@/components/shell/AppProviders";
 import { Topbar } from "@/components/shell/Topbar";
 import "./globals.css";
 
-const inter = Inter({ weight: "variable", subsets: ["latin", "cyrillic", "cyrillic-ext"], display: "swap", variable: "--font-inter" });
-const jetBrainsMono = JetBrains_Mono({ weight: "variable", subsets: ["latin", "cyrillic", "cyrillic-ext"], display: "swap", variable: "--font-jetbrains-mono" });
+// IBM Plex covers the Kazakh Cyrillic letters (ә ғ қ ң ө ұ ү һ і) in both families.
+const plexSans = IBM_Plex_Sans({ weight: ["400", "500", "600"], subsets: ["latin", "cyrillic", "cyrillic-ext"], display: "swap", variable: "--font-plex-sans" });
+const plexMono = IBM_Plex_Mono({ weight: ["400", "500"], subsets: ["latin", "cyrillic", "cyrillic-ext"], display: "swap", variable: "--font-plex-mono" });
 
 // Render HTML per request so Next can attach the matching CSP nonce.
 export const dynamic = "force-dynamic";
 
 export const viewport: Viewport = {
-  themeColor: "#07110E",
+  themeColor: "#131415",
   colorScheme: "dark",
 };
 
@@ -55,7 +56,7 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const locale = (await headers()).get("x-safesign-lang") === "kk" ? "kk" : "ru";
   return (
-    <html lang={locale} className={`${inter.variable} ${jetBrainsMono.variable}`}>
+    <html lang={locale} className={`${plexSans.variable} ${plexMono.variable}`}>
       <body>
         <AppProviders initialLocale={locale}>
           <Topbar />

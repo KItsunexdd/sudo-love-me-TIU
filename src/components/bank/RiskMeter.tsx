@@ -8,12 +8,12 @@ import { Building2, Check, Moon, PhoneIncoming, TriangleAlert } from "lucide-rea
 import { Badge } from "@/components/ui/Badge";
 import { riskLevel } from "@/lib/risk/engine";
 import type { RiskLevel } from "@/lib/db/types";
-import { SPRING_SMOOTH } from "@/lib/ui/motion";
+import { TWEEN_ENTER } from "@/lib/ui/motion";
 
 const getTiers = (t: Translate) => ({
-  LOW: { bar: "bg-bcc shadow-glow-bcc", text: t("riskMeter.instant") },
-  MEDIUM: { bar: "bg-gold shadow-glow-gold", text: t("riskMeter.acknowledge") },
-  HIGH: { bar: "bg-danger shadow-glow-danger", text: t("riskMeter.cosign") },
+  LOW: { bar: "bg-bcc", text: t("riskMeter.instant") },
+  MEDIUM: { bar: "bg-gold", text: t("riskMeter.acknowledge") },
+  HIGH: { bar: "bg-danger", text: t("riskMeter.cosign") },
 });
 
 const rules = {
@@ -38,13 +38,13 @@ export function RiskMeter({ score, level: assessedLevel, reasons = [], codes = [
   const { bar, text } = tiers[level];
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold leading-snug 2xl:type-h3">
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-[0.8125rem] font-normal text-ink-secondary">
           {t("common.score")} <span className="text-ink-muted">(Anti-Scam)</span>
         </h2>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-base font-bold tabular-nums 2xl:text-lg">{value} / 100</span>
+        <div className="flex flex-wrap items-baseline gap-3">
+          <span className="font-mono text-[0.9375rem] font-medium tabular-nums">{value}<span className="text-ink-muted"> / 100</span></span>
           <Badge status={level} />
         </div>
       </div>
@@ -56,42 +56,43 @@ export function RiskMeter({ score, level: assessedLevel, reasons = [], codes = [
         aria-valuemax={100}
         aria-valuenow={value}
         aria-valuetext={text}
-        className="relative h-2.5 overflow-hidden rounded-full bg-terminal ring-1 ring-border-default"
+        className="relative h-1 overflow-hidden rounded-full bg-elevated"
       >
         <motion.div
           initial={false}
-          animate={{ width: `${value}%` }}
-          transition={reduce ? { duration: 0 } : SPRING_SMOOTH}
-          className={`h-full rounded-full transition-colors ${bar}`}
+          animate={{ scaleX: value / 100 }}
+          transition={reduce ? { duration: 0 } : TWEEN_ENTER}
+          style={{ originX: 0 }}
+          className={`h-full w-full rounded-full transition-colors ${bar}`}
         />
-        <span aria-hidden="true" className="absolute inset-y-0 left-[40%] w-px bg-ink-muted" />
-        <span aria-hidden="true" className="absolute inset-y-0 left-[60%] w-px bg-ink-muted" />
+        <span aria-hidden="true" className="absolute inset-y-0 left-[40%] w-0.5 bg-canvas" />
+        <span aria-hidden="true" className="absolute inset-y-0 left-[60%] w-0.5 bg-canvas" />
       </div>
 
       {reasons.length > 0 ? (
         <>
-          <p className="text-xs font-medium text-ink-secondary sm:text-[13px]">{text}</p>
+          <p className="text-[0.8125rem] text-ink-secondary">{text}</p>
           <ul className="flex flex-wrap gap-1.5">
             {reasons.map((reason, index) => {
               const code = codes[index];
               const match = code && Object.hasOwn(rules, code) ? rules[code as keyof typeof rules] : undefined;
               const Icon = match?.[1] ?? TriangleAlert;
               return (
-                <li key={reason} className="flex items-center gap-1.5 rounded-lg border border-border-default bg-terminal px-2 py-1 text-xs text-ink-secondary">
-                  <Icon aria-hidden="true" className="size-3.5 shrink-0 text-gold" />
+                <li key={reason} className="flex items-center gap-1.5 rounded-md border border-border-default bg-terminal px-2 py-1 text-xs text-ink-secondary">
+                  <Icon aria-hidden="true" className="size-3.5 shrink-0 text-ink-muted" strokeWidth={1.75} />
                   <span>{riskReason(locale, code, reason)}</span>
-                  {match && <span className="shrink-0 font-mono font-semibold tabular-nums text-amber-300">+{match[0]}</span>}
+                  {match && <span className="shrink-0 font-mono tabular-nums text-ink-muted">+{match[0]}</span>}
                 </li>
               );
             })}
           </ul>
         </>
       ) : (
-        <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs sm:text-[13px]">
+        <div className="flex flex-wrap items-center justify-between gap-1.5 text-[0.8125rem]">
           <span className="text-ink-secondary">{text}</span>
           {value === 0 && (
-            <span className="inline-flex items-center gap-1 font-medium text-bcc">
-              <Check aria-hidden="true" className="size-3.5" /> {t("riskMeter.trusted")}
+            <span className="inline-flex items-center gap-1.5 text-ink-secondary">
+              <Check aria-hidden="true" className="size-3.5 text-bcc" strokeWidth={2} /> {t("riskMeter.trusted")}
             </span>
           )}
         </div>

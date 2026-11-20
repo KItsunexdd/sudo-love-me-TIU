@@ -16,17 +16,17 @@ export function CosignSignatureChain({ transaction }: { transaction: Transaction
   const first = signatureHash(transaction.primarySignature);
   const second = signatureHash(transaction.cosignSignature);
   return (
-    <ol aria-label={t("cosignRequestCard.chain")} className="space-y-1.5 rounded-xl border border-border-default bg-terminal p-2.5 text-xs sm:text-[13px]">
-      <li className="flex flex-wrap items-center gap-1.5">
-        <ShieldCheck aria-hidden="true" className="size-4 shrink-0 text-bcc" />
-        <span className="font-medium">{t("cosignRequestCard.first")}</span>
+    <ol aria-label={t("cosignRequestCard.chain")} className="divide-y divide-border-subtle rounded-lg border border-border-default bg-terminal text-[0.8125rem]">
+      <li className="flex flex-wrap items-center gap-2 px-3 py-2">
+        <ShieldCheck aria-hidden="true" className="size-4 shrink-0 text-bcc" strokeWidth={1.75} />
+        <span className="text-ink-primary">{t("cosignRequestCard.first")}</span>
         {first && <HashChip value={first} label="Sig1" visible={5} />}
       </li>
-      <li className="flex flex-wrap items-center gap-1.5 border-t border-border-subtle pt-1.5">
+      <li className="flex flex-wrap items-center gap-2 px-3 py-2">
         {second
-          ? <ShieldCheck aria-hidden="true" className="size-4 shrink-0 text-bcc" />
-          : <LockKeyhole aria-hidden="true" className="size-4 shrink-0 text-gold" />}
-        <span className="font-medium">{second ? t("cosignRequestCard.second") : t("cosignRequestCard.pending")}</span>
+          ? <ShieldCheck aria-hidden="true" className="size-4 shrink-0 text-bcc" strokeWidth={1.75} />
+          : <LockKeyhole aria-hidden="true" className="size-4 shrink-0 text-ink-muted" strokeWidth={1.75} />}
+        <span className={second ? "text-ink-primary" : "text-ink-secondary"}>{second ? t("cosignRequestCard.second") : t("cosignRequestCard.pending")}</span>
         {second && <HashChip value={second} label="Sig2" tone="info" visible={5} />}
       </li>
     </ol>
@@ -81,59 +81,43 @@ export function CosignRequestCard({
       animate="visible"
       exit="exit"
     >
-      <Card
-        className={`space-y-2.5 p-3.5 sm:space-y-3 sm:p-4 ${
-          corporate
-            ? "border-gold/55 shadow-glow-gold"
-            : "border-danger/60 shadow-glow-danger"
-        }`}
-      >
-        <div
-          className={`flex items-center justify-between gap-2 rounded-xl px-3 py-2 ${
-            corporate ? "border border-gold/40 bg-gold/15 text-amber-200" : "bg-danger-solid text-white"
-          }`}
-        >
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="relative flex size-2.5 shrink-0" aria-hidden="true">
-              <span className="absolute inline-flex size-full rounded-full bg-current opacity-75 motion-safe:animate-ping" />
-              <span className="relative inline-flex size-2.5 rounded-full bg-current" />
-            </span>
-            <ShieldAlert className="size-[18px] shrink-0" aria-hidden="true" />
-            <div className="min-w-0">
-              <Heading className="text-sm font-bold leading-tight">
-                {corporate ? t("cosignRequestCard.directorRequired") : t("cosignRequestCard.suspected")}
-              </Heading>
-              <p className="mt-0.5 text-xs">
-                {corporate ? t("cosignDetails.corporate") : <>{t("common.risk")} <span className="font-mono font-bold tabular-nums">{transaction.riskScore}/100</span></>}
-              </p>
-            </div>
+      <Card className={`space-y-4 ${corporate ? "border-gold/40" : "border-danger/45"}`}>
+        <div className={`flex items-start gap-3 rounded-lg px-3 py-2.5 ${corporate ? "bg-gold/[.10]" : "bg-danger/[.10]"}`}>
+          <ShieldAlert className={`mt-0.5 size-[18px] shrink-0 ${corporate ? "text-gold-text" : "text-danger-text"}`} strokeWidth={1.75} aria-hidden="true" />
+          <div className="min-w-0">
+            <Heading className={`text-sm font-medium leading-5 ${corporate ? "text-gold-text" : "text-danger-text"}`}>
+              {corporate ? t("cosignRequestCard.directorRequired") : t("cosignRequestCard.suspected")}
+            </Heading>
+            <p className="mt-0.5 text-xs text-ink-secondary">
+              {corporate ? t("cosignDetails.corporate") : <>{t("common.risk")} <span className="font-mono tabular-nums text-ink-primary">{transaction.riskScore}/100</span></>}
+            </p>
           </div>
         </div>
 
-        <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1 text-sm">
-          <dt className="text-xs text-ink-secondary sm:text-sm">{t("cosignRequestCard.sender")}</dt>
-          <dd className="break-words font-semibold">{senderName}</dd>
-          <dt className="text-xs text-ink-secondary sm:text-sm">{t("common.amount")}</dt>
-          <dd className="break-words font-mono text-2xl font-extrabold leading-tight tracking-tight tabular-nums text-ink-primary sm:text-[1.75rem]">
+        <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-4 gap-y-2 text-sm">
+          <dt className="text-[0.8125rem] text-ink-muted">{t("cosignRequestCard.sender")}</dt>
+          <dd className="break-words">{senderName}</dd>
+          <dt className="text-[0.8125rem] text-ink-muted">{t("common.amount")}</dt>
+          <dd className="break-words font-mono text-[1.75rem] font-medium leading-tight tracking-[-0.01em] tabular-nums text-ink-primary sm:text-[2rem]">
             {formatTenge(amountTenge)}
           </dd>
-          <dt className="text-xs text-ink-secondary sm:text-sm">{t("cosignRequestCard.to")}</dt>
-          <dd className="break-words font-semibold">
+          <dt className="text-[0.8125rem] text-ink-muted">{t("cosignRequestCard.to")}</dt>
+          <dd className="break-words">
             {recipientName}
-            <span className="mono-data mt-0.5 block break-all text-xs text-ink-secondary">{formatIban(recipientAccount)}</span>
+            <span className="mt-0.5 block break-all font-mono text-xs tabular-nums text-ink-muted">{formatIban(recipientAccount)}</span>
           </dd>
           {purpose && (
             <>
-              <dt className="text-xs text-ink-secondary sm:text-sm">{t("common.purpose")}</dt>
-              <dd className="break-words text-xs text-ink-secondary sm:text-sm">{purpose}</dd>
+              <dt className="text-[0.8125rem] text-ink-muted">{t("common.purpose")}</dt>
+              <dd className="break-words text-[0.8125rem] text-ink-secondary">{purpose}</dd>
             </>
           )}
         </dl>
 
         {transaction.riskReasons.length > 0 && (
-          <div className="space-y-1 rounded-xl border border-border-default bg-terminal/70 px-3 py-2">
-            <p className="text-xs font-semibold text-ink-secondary">{t("cosignRequestCard.reasons")}</p>
-            <ul className={`list-disc space-y-0.5 pl-4 text-xs leading-snug sm:text-[13px] ${corporate ? "marker:text-gold" : "marker:text-danger-text"}`}>
+          <div className="space-y-2 rounded-lg border border-border-default bg-terminal px-3 py-2.5">
+            <p className="text-xs text-ink-muted">{t("cosignRequestCard.reasons")}</p>
+            <ul className="list-disc space-y-1 pl-4 text-[0.8125rem] leading-5 text-ink-secondary marker:text-ink-muted">
               {transaction.riskReasons.map((reason, index) => (
                 <li key={index}>{riskReason(locale, transaction.riskCodes?.[index], reason, corporate)}</li>
               ))}
@@ -142,22 +126,22 @@ export function CosignRequestCard({
         )}
 
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className={`inline-flex items-center gap-1.5 text-xs font-medium sm:text-sm ${expired ? "text-danger-text" : "text-gold"}`}>
-            <Clock3 className="size-4 shrink-0" aria-hidden="true" />
+          <span className={`inline-flex items-center gap-1.5 text-[0.8125rem] ${expired ? "text-danger-text" : "text-ink-secondary"}`}>
+            <Clock3 className="size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
             {expired ? t("common.expired") : t("cosignRequestCard.remaining")}
-            <span role="timer" className="mono-data font-bold">{seconds === undefined ? "—" : formatCosignTimer(seconds)}</span>
+            <span role="timer" className={`mono-data ${expired ? "" : "text-gold-text"}`}>{seconds === undefined ? "—" : formatCosignTimer(seconds)}</span>
           </span>
-          <HashChip value={transaction.txHashHex} label="txHash" visible={5} />
+          <HashChip value={transaction.txHashHex} />
         </div>
 
         <CosignSignatureChain transaction={transaction} />
 
-        <div className="space-y-2 pt-0.5">
+        <div className="space-y-2">
           <Button
             variant="danger"
             size={compact ? "md" : "lg"}
             className="w-full px-3"
-            icon={<ShieldX className="size-5" />}
+            icon={<ShieldX />}
             loading={busy === "reject"}
             disabled={unavailable}
             onClick={onReject}
@@ -167,14 +151,14 @@ export function CosignRequestCard({
           <Button
             size={compact ? "md" : "lg"}
             className="w-full px-3"
-            icon={<Fingerprint className="size-5" />}
+            icon={<Fingerprint />}
             loading={busy === "sign"}
             disabled={unavailable || !deviceKind}
             onClick={onSign}
           >
             {deviceKind === "SOFTWARE_FALLBACK" ? t("cosignRequestCard.software") : t("cosignRequestCard.passkey")}
           </Button>
-          <p className="px-1 text-center text-xs text-ink-muted">
+          <p className="px-1 pt-1 text-center text-xs text-ink-muted">
             {t("cosignRequestCard.coolingHint")}
           </p>
           {devicePrompt}

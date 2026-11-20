@@ -5,20 +5,8 @@ import { useT } from "@/components/shell/LocaleProvider";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import {
-  Activity,
-  Cpu,
-  Filter,
-  Microscope,
-  Monitor,
-  Radar,
-  RefreshCw,
-  Search,
-  ShieldAlert,
-  ShieldCheck,
-  Wallet,
-  Zap,
-} from "lucide-react";
+import { TWEEN_ENTER } from "@/lib/ui/motion";
+import { Filter, Monitor, Radar, RefreshCw, Search } from "lucide-react";
 import { useDemoMode } from "@/components/shell/DemoModeProvider";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -31,7 +19,7 @@ import { api, type ApiError } from "@/lib/client/api";
 import { useEventStream, type ConnectionStatus } from "@/lib/client/useEventStream";
 import type { SecurityEvent } from "@/lib/db/types";
 import type { socReport } from "@/lib/soc/service";
-import { formatMs, formatTenge } from "@/lib/ui/format";
+import { fingerprint, formatMs, formatTenge } from "@/lib/ui/format";
 import { AttackBreakdownChart } from "./AttackBreakdownChart";
 import { SocAnimatedMetric } from "./SocAnimatedMetric";
 import { SocEventDetailDrawer } from "./SocEventDetailDrawer";
@@ -50,12 +38,12 @@ type SocReportData = Awaited<ReturnType<typeof socReport>>;
 
 const getConnectionBadges = (t: Translate): Record<
   ConnectionStatus,
-  { label: string; tone: "neutral" | "success" | "warning" | "danger"; pulse: boolean }
+  { label: string; tone: "neutral" | "success" | "warning" | "danger" }
 > => ({
-  connecting: { label: t("common.connecting"), tone: "neutral", pulse: true },
-  live: { label: "SSE Live", tone: "success", pulse: true },
-  polling: { label: t("common.polling"), tone: "warning", pulse: true },
-  offline: { label: t("common.offline"), tone: "danger", pulse: false },
+  connecting: { label: t("common.connecting"), tone: "neutral" },
+  live: { label: "SSE", tone: "success" },
+  polling: { label: t("common.polling"), tone: "warning" },
+  offline: { label: t("common.offline"), tone: "danger" },
 });
 
 const getSeverityOptions = (t: Translate): readonly Segment<SocSeverityFilter>[] => ([
@@ -95,8 +83,9 @@ export function SocDashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [projectorMode, setProjectorMode] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<SecurityEvent | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
-  // Отслеживание вновь прибывших строк для визуальной подсветки
+  // Highlight only events received after the first snapshot.
   const knownIdsRef = useRef<Set<string> | null>(null);
   const [highlightedIds, setHighlightedIds] = useState<Set<string>>(() => new Set());
   const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -169,16 +158,17 @@ export function SocDashboard() {
     [markNewEvents],
   );
 
-  // Реактивное обновление по SSE / resync / DEMO_RESET
   useEffect(() => {
     const controller = new AbortController();
     const isReset = lastEvent?.type === "DEMO_RESET";
-    if (isReset) setSelectedEvent(null);
+    if (isReset) {
+      setSelectedEvent(null);
+      setDrawerOpen(false);
+    }
     void loadReport(controller.signal, { reset: isReset });
     return () => controller.abort();
   }, [lastEvent, syncVersion, resyncVersion, loadReport]);
 
-  // Мягкий polling fallback (подхватывает также события регистрации устройств и обрывы SSE)
   useEffect(() => {
     const intervalMs = connectionStatus === "live" ? 6_000 : 2_500;
     const interval = setInterval(() => {
@@ -193,7 +183,10 @@ export function SocDashboard() {
   const mlDsa = aggregates?.verification.mlDsa ?? { count: 0, averageMs: 0, p95Ms: 0 };
   const webAuthn = aggregates?.verification.webAuthn ?? { count: 0, averageMs: 0, p95Ms: 0 };
   const hybridTotalAvgMs = mlDsa.averageMs + webAuthn.averageMs;
-  const mlDsaWithinTarget = mlDsa.count === 0 || mlDsa.averageMs < 25;
+  const hasHybridTiming = mlDsa.count > 0 && webAuthn.count > 0;
+  // Compare measured verification with the lower end of the SMS reference range.
+  const smsReferenceMs = 12_000;
+  const benchmarkMaxMs = Math.max(smsReferenceMs, hasHybridTiming ? hybridTotalAvgMs : 0);
 
   const breakdown = useMemo(
     () => buildAttackBreakdown(aggregates?.blockedByType ?? {}, t),
@@ -241,465 +234,260 @@ export function SocDashboard() {
     setSearchQuery("");
   }
 
+  function inspectEvent(item: SecurityEvent) {
+    setSelectedEvent(item);
+    setDrawerOpen(true);
+  }
+
   const conn = connectionBadges[connectionStatus];
-  const kpiNumberClass = projectorMode
-    ? "font-mono text-4xl font-extrabold leading-none tabular-nums xl:text-5xl"
-    : "display-kpi";
+  const sectionTitle = projectorMode ? "text-xl font-medium" : "type-h2";
+  const metrics = [
+    {
+      label: t("socDashboard.attacks"),
+      value: aggregates?.attacksBlocked ?? 0,
+      format: formatCount,
+      comparison: `${t("socDashboard.attacked")} ${formatTenge(aggregates?.attackedAmountTenge ?? 0)}`,
+      testId: "soc-attacks-blocked",
+      accent: (aggregates?.attacksBlocked ?? 0) > 0,
+    },
+    {
+      label: t("socDashboard.saved"),
+      value: aggregates?.savedAmountTenge ?? 0,
+      format: formatTenge,
+      comparison: t("socDashboard.blocked"),
+    },
+    {
+      label: t("common.signed"),
+      value: aggregates?.signedWithoutSms ?? 0,
+      format: formatCount,
+      comparison: t("socDashboard.noSms"),
+    },
+    {
+      label: t("socDashboard.mean"),
+      value: mlDsa.averageMs,
+      format: formatMs,
+      isEmpty: mlDsa.count === 0,
+      comparison: (
+        <>
+          p95 {mlDsa.count ? formatMs(mlDsa.p95Ms) : "—"} ·{" "}
+          <span className={mlDsa.count > 0 && mlDsa.averageMs >= 25 ? "font-medium text-ink-primary" : undefined}>
+            {t("socDashboard.target")}
+          </span>
+        </>
+      ),
+    },
+  ];
 
   return (
-    <div className={projectorMode ? "space-y-6" : "space-y-5"}>
-      {/* Заголовок и панель управления SOC */}
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-bcc/40 bg-bcc/[.12] px-3 py-1 text-xs font-semibold text-emerald-300">
-              <Activity aria-hidden="true" className="size-3.5" />
-              {t("socDashboard.center")}
-            </span>
-            <Badge tone={conn.tone}>
-              <span
-                aria-hidden="true"
-                className={`size-2 rounded-full bg-current ${conn.pulse ? "motion-safe:animate-pulse" : ""}`}
-              />
-              {conn.label}
-            </Badge>
-            {projectorMode && (
-              <Badge tone="info">{t("socDashboard.projectorBadge")}</Badge>
-            )}
+    <div className="space-y-6">
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <h1 className={projectorMode ? "text-3xl font-medium" : "type-h1"}>{t("socDashboard.heading")}</h1>
+            <Badge tone={conn.tone} dot className="font-mono">{conn.label}</Badge>
           </div>
-          <h1 className={projectorMode ? "mt-2 text-3xl font-extrabold tracking-tight" : "type-h1 mt-2"}>
-            {t("socDashboard.heading")}
-          </h1>
-          <p className={`mt-1 text-ink-secondary ${projectorMode ? "text-base" : "text-sm"}`}>
-            {t("socDashboard.intro")}
-          </p>
+          <p className={`mt-1 text-ink-secondary ${projectorMode ? "text-base" : "type-body"}`}>{t("socDashboard.intro")}</p>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            size="sm"
-            variant={projectorMode ? "primary" : "secondary"}
-            icon={<Monitor className="size-4" />}
-            aria-pressed={projectorMode}
-            onClick={() => setProjectorMode(value => !value)}
-          >
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <Button size="sm" variant={projectorMode ? "secondary" : "ghost"} icon={<Monitor />}
+            aria-pressed={projectorMode} onClick={() => setProjectorMode(value => !value)}>
             {projectorMode ? t("socDashboard.projectorOn") : t("socDashboard.projector")}
           </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            loading={refreshing}
-            icon={<RefreshCw className="size-4" />}
-            onClick={() => void loadReport(undefined, { manual: true })}
-          >
+          <Button size="sm" variant="secondary" loading={refreshing} icon={<RefreshCw />}
+            onClick={() => void loadReport(undefined, { manual: true })}>
             {t("common.refresh")}
           </Button>
         </div>
-      </div>
+      </header>
 
-      {/* Zero-Crash ошибка загрузки */}
       {error && (
-        <ErrorCard
-          error={error}
-          action={
-            <Button size="sm" variant="secondary" onClick={() => void loadReport(undefined, { manual: true })}>
-              {t("socDashboard.retry")}
-            </Button>
-          }
-        />
+        <ErrorCard error={error} action={
+          <Button size="sm" variant="secondary" onClick={() => void loadReport(undefined, { manual: true })}>
+            {t("socDashboard.retry")}
+          </Button>
+        } />
       )}
 
-      {/* 4 KPI-карточки в реальном времени */}
-      <section aria-label={t("socDashboard.kpis")} className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {/* KPI 1: Атак отражено */}
-        <Card variant={(aggregates?.attacksBlocked ?? 0) > 0 ? "danger" : "default"}>
-          <div className="flex items-center justify-between gap-2">
-            <span className={`font-semibold uppercase tracking-wider text-ink-secondary ${projectorMode ? "text-sm" : "text-xs"}`}>
-              {t("socDashboard.attacks")}
-            </span>
-            <span className="grid size-9 place-items-center rounded-xl border border-danger/40 bg-danger/[.14] text-danger-text">
-              <ShieldAlert aria-hidden="true" className="size-5" />
-            </span>
-          </div>
-          {loading ? (
-            <Skeleton className="mt-4 h-9 w-24" />
-          ) : (
-            <div data-testid="soc-attacks-blocked" className={`mt-3 text-ink-primary ${kpiNumberClass}`}>
-              <SocAnimatedMetric
-                value={aggregates?.attacksBlocked ?? 0}
-                format={v => Math.round(v).toLocaleString("ru-KZ")}
-              />
-            </div>
-          )}
-          <p className={`mt-2 font-medium text-ink-secondary ${projectorMode ? "text-sm" : "text-xs"}`}>
-            {t("socDashboard.attacked")} {formatTenge(aggregates?.attackedAmountTenge ?? 0)}
-          </p>
-          <p className={`mt-1 font-medium text-ink-secondary ${projectorMode ? "text-sm" : "text-xs"}`}>
-            {t("socDashboard.tampering")} {formatTenge(aggregates?.preventedTamperAmountTenge ?? 0)}
-          </p>
-        </Card>
-
-        {/* KPI 2: Спасено от мошенничества */}
-        <Card variant={(aggregates?.savedAmountTenge ?? 0) > 0 ? "success" : "default"}>
-          <div className="flex items-center justify-between gap-2">
-            <span className={`font-semibold uppercase tracking-wider text-ink-secondary ${projectorMode ? "text-sm" : "text-xs"}`}>
-              {t("socDashboard.saved")}
-            </span>
-            <span className="grid size-9 place-items-center rounded-xl border border-bcc/40 bg-bcc/[.12] text-bcc">
-              <Wallet aria-hidden="true" className="size-5" />
-            </span>
-          </div>
-          {loading ? (
-            <Skeleton className="mt-4 h-9 w-40" />
-          ) : (
-            <div className={`mt-3 text-bcc ${kpiNumberClass}`}>
-              <SocAnimatedMetric
-                value={aggregates?.savedAmountTenge ?? 0}
-                format={v => formatTenge(Math.round(v))}
-              />
-            </div>
-          )}
-          <p className={`mt-2 font-medium text-ink-secondary ${projectorMode ? "text-sm" : "text-xs"}`}>
-            {t("socDashboard.blocked")}
-          </p>
-        </Card>
-
-        {/* KPI 3: Подписано без SMS */}
-        <Card variant="default">
-          <div className="flex items-center justify-between gap-2">
-            <span className={`font-semibold uppercase tracking-wider text-ink-secondary ${projectorMode ? "text-sm" : "text-xs"}`}>
-              {t("common.signed")}
-            </span>
-            <span className="grid size-9 place-items-center rounded-xl border border-bcc/40 bg-bcc/[.12] text-emerald-300">
-              <ShieldCheck aria-hidden="true" className="size-5" />
-            </span>
-          </div>
-          {loading ? (
-            <Skeleton className="mt-4 h-9 w-24" />
-          ) : (
-            <div className={`mt-3 text-ink-primary ${kpiNumberClass}`}>
-              <SocAnimatedMetric
-                value={aggregates?.signedWithoutSms ?? 0}
-                format={v => Math.round(v).toLocaleString("ru-KZ")}
-              />
-            </div>
-          )}
-          <p className={`mt-2 font-medium text-ink-secondary ${projectorMode ? "text-sm" : "text-xs"}`}>
-            {t("socDashboard.noSms")}
-          </p>
-        </Card>
-
-        {/* KPI 4: Ср. время проверки ML-DSA (мс) + p95 */}
-        <Card variant="elevated" className="border-quantum/35">
-          <div className="flex items-center justify-between gap-2">
-            <span className={`font-semibold uppercase tracking-wider text-ink-secondary ${projectorMode ? "text-sm" : "text-xs"}`}>
-              {t("socDashboard.mean")}
-            </span>
-            <span className="grid size-9 place-items-center rounded-xl border border-quantum/40 bg-quantum/[.12] text-quantum">
-              <Cpu aria-hidden="true" className="size-5" />
-            </span>
-          </div>
-          {loading ? (
-            <Skeleton className="mt-4 h-9 w-28" />
-          ) : (
-            <div className={`mt-3 text-sky-300 ${kpiNumberClass}`}>
-              <SocAnimatedMetric
-                value={mlDsa.averageMs}
-                isEmpty={mlDsa.count === 0}
-                format={v => formatMs(v)}
-              />
-            </div>
-          )}
-          <div className={`mt-2 flex flex-wrap items-center justify-between gap-2 font-mono ${projectorMode ? "text-sm" : "text-xs"}`}>
-            <span className="font-semibold text-ink-primary">
-              p95: <span className="text-quantum">{mlDsa.count > 0 ? formatMs(mlDsa.p95Ms) : "—"}</span>
-            </span>
-            <Badge tone={mlDsaWithinTarget ? "success" : "warning"} className="font-mono">
-              {t("socDashboard.target")}
-            </Badge>
-          </div>
-        </Card>
+      <section aria-label={t("socDashboard.kpis")} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {metrics.map(metric => (
+          <Card key={metric.label} className="flex flex-col items-start">
+            <span className={projectorMode ? "text-base text-ink-secondary" : "type-label"}>{metric.label}</span>
+            {loading ? <Skeleton className="my-3 h-8 w-24" /> : (
+              <div data-testid={metric.testId} className={`display-kpi my-3 max-w-full break-words ${projectorMode ? "text-4xl" : ""} ${metric.accent ? "text-bcc" : "text-ink-primary"}`}>
+                <SocAnimatedMetric value={metric.value} format={metric.format} isEmpty={metric.isEmpty} />
+              </div>
+            )}
+            <p className={`mt-auto font-mono tabular-nums text-ink-muted ${projectorMode ? "text-sm" : "type-micro"}`}>
+              {metric.comparison}
+            </p>
+          </Card>
+        ))}
       </section>
 
-      {/* Средняя секция: SVG-разбивка атак + сравнение задержек SMS vs SafeSign */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
-        <div className="lg:col-span-7">
-          {loading ? (
-            <Card className="space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <Skeleton className="h-6 w-52" />
-                <Skeleton className="h-6 w-20 rounded-full" />
-              </div>
-              <div className="space-y-2.5 pt-2">
-                {Array.from({ length: 6 }).map((_, index) => (
-                  <Skeleton key={index} className="h-6 w-full rounded-full" />
-                ))}
-              </div>
-            </Card>
-          ) : (
-            <AttackBreakdownChart
-              items={breakdown}
-              totalAttacks={aggregates?.attacksBlocked ?? 0}
-              activeFilter={typeFilter}
-              onSelectCategory={setTypeFilter}
-              projectorMode={projectorMode}
-            />
-          )}
-        </div>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
+        {loading ? (
+          <Card className="space-y-4">
+            <Skeleton className="h-6 w-52" />
+            {Array.from({ length: 6 }, (_, index) => <Skeleton key={index} className="h-4 w-full" />)}
+          </Card>
+        ) : (
+          <AttackBreakdownChart items={breakdown} totalAttacks={aggregates?.attacksBlocked ?? 0}
+            preventedTamperAmountTenge={aggregates?.preventedTamperAmountTenge}
+            activeFilter={typeFilter} onSelectCategory={setTypeFilter} projectorMode={projectorMode} />
+        )}
 
-        <Card
-          className="lg:col-span-5"
-          heading={
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="type-h2 flex items-center gap-2">
-                <Zap aria-hidden="true" className="size-5 text-quantum" />
-                {t("socDashboard.benchmark")}
-              </h2>
-              <Badge tone="info" className="font-mono tabular-nums">
-                {mlDsa.count} {t("soc.samples.other", { count: mlDsa.count })}
-              </Badge>
+        <Card heading={
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <h2 className={sectionTitle}>{t("socDashboard.benchmark")}</h2>
+            <span className="mono-data text-ink-muted">{formatCount(mlDsa.count)} {t("soc.samples.other", { count: mlDsa.count })}</span>
+          </div>
+        }>
+          <div className="space-y-5">
+            <div>
+              <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                <span className={projectorMode ? "text-base" : "type-label"}>{t("socDashboard.otp")}</span>
+                <span className="mono-data text-ink-secondary">{t("socDashboard.duration")} {formatTenge(12)} {t("socDashboard.perOp")}</span>
+              </div>
+              <div aria-hidden="true" className="h-1 bg-border-default">
+                <motion.div initial={false} animate={{ scaleX: smsReferenceMs / benchmarkMaxMs }}
+                  transition={reduce ? { duration: 0 } : TWEEN_ENTER} style={{ originX: 0 }} className="h-full bg-ink-muted" />
+              </div>
+              <p className="mt-2 text-xs leading-4 text-ink-muted">{t("socDashboard.exposure")}</p>
             </div>
-          }
-          divided
-        >
-          <div className="space-y-4">
-            {/* Сравнительные полосы */}
-            <div className="space-y-3">
-              <div>
-                <div className="mb-1 flex items-center justify-between gap-2 text-xs">
-                  <span className="font-semibold text-ink-secondary">{t("socDashboard.otp")}</span>
-                  <span className="font-mono font-bold tabular-nums text-danger-text">{t("socDashboard.duration")} {formatTenge(12)} {t("socDashboard.perOp")}</span>
-                </div>
-                <div className="h-3 w-full overflow-hidden rounded-full bg-terminal p-0.5">
-                  <div className="h-full w-full rounded-full bg-danger/70" />
-                </div>
-                <p className="mt-1 text-xs text-ink-muted">
-                  {t("socDashboard.exposure")}
-                </p>
+            <div>
+              <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                <span className={projectorMode ? "text-base" : "type-label"}>BCC SafeSign (Passkey + ML-DSA-65)</span>
+                <span className="mono-data text-ink-secondary">{hasHybridTiming ? formatMs(hybridTotalAvgMs) : "—"} · {formatTenge(0)} {t("socDashboard.perOp")}</span>
               </div>
-
-              <div>
-                <div className="mb-1 flex items-center justify-between gap-2 text-xs">
-                  <span className="font-semibold text-emerald-300">BCC SafeSign (Passkey + ML-DSA-65)</span>
-                  <span className="font-mono font-bold tabular-nums text-bcc">
-                    {mlDsa.count > 0 ? formatMs(hybridTotalAvgMs) : "< 5 мс"} · {formatTenge(0)} {t("socDashboard.perOp")}
-                  </span>
-                </div>
-                <div className="h-3 w-full overflow-hidden rounded-full bg-terminal p-0.5">
-                  <div className="h-full w-[4%] min-w-[10px] rounded-full bg-bcc shadow-glow-bcc" />
-                </div>
-                <p className="mt-1 text-xs text-ink-muted">
-                  {t("socDashboard.binding")}
-                </p>
+              <div aria-hidden="true" className={`h-1 bg-border-default ${hasHybridTiming && hybridTotalAvgMs > 0 ? "border-l border-bcc" : ""}`}>
+                {hasHybridTiming && (
+                  <motion.div initial={false} animate={{ scaleX: hybridTotalAvgMs / benchmarkMaxMs }}
+                    transition={reduce ? { duration: 0 } : TWEEN_ENTER} style={{ originX: 0 }} className="h-full bg-bcc" />
+                )}
               </div>
+              <p className="mt-2 text-xs leading-4 text-ink-muted">{t("socDashboard.binding")}</p>
             </div>
-
-            {/* Детальная телеметрия проверок */}
-            <dl className="grid grid-cols-2 gap-3 rounded-xl border border-border-subtle bg-terminal p-3">
-              <div>
-                <dt className="text-xs text-ink-muted">{t("socDashboard.pqTiming")}</dt>
-                <dd className="mono-data mt-1 font-bold text-sky-300">
-                  {loading ? <Skeleton className="h-5 w-24" /> : mlDsa.count > 0 ? `${formatMs(mlDsa.averageMs)} / ${formatMs(mlDsa.p95Ms)}` : "—"}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs text-ink-muted">{t("socDashboard.classicTiming")}</dt>
-                <dd className="mono-data mt-1 font-bold text-emerald-300">
-                  {loading ? <Skeleton className="h-5 w-24" /> : webAuthn.count > 0 ? `${formatMs(webAuthn.averageMs)} / ${formatMs(webAuthn.p95Ms)}` : "—"}
-                </dd>
-              </div>
+            <dl className="grid grid-cols-2 gap-4 border-t border-border-subtle pt-3">
+              {[
+                { label: t("socDashboard.pqTiming"), timing: mlDsa },
+                { label: t("socDashboard.classicTiming"), timing: webAuthn },
+              ].map(({ label, timing }) => (
+                <div key={label}>
+                  <dt className="text-xs text-ink-muted">{label}</dt>
+                  <dd className="mono-data mt-1 text-ink-primary">
+                    {loading ? <Skeleton className="h-5 w-20" /> : timing.count > 0 ? `${formatMs(timing.averageMs)} / ${formatMs(timing.p95Ms)}` : "—"}
+                  </dd>
+                </div>
+              ))}
             </dl>
           </div>
         </Card>
       </div>
 
-      {/* Живая таблица инцидентов */}
-      <Card
-        heading={
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <h2 className="type-h2">{t("socDashboard.journal")}</h2>
-                <Badge tone="neutral" className="font-mono tabular-nums">
-                  {filteredEvents.length} {t("socDashboard.of")} {events.length}
-                </Badge>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <SegmentedControl
-                  label={t("socDashboard.severity")}
-                  options={severityOptions}
-                  value={severityFilter}
-                  onChange={setSeverityFilter}
-                />
-                <div className="relative">
-                  <Search
-                    aria-hidden="true"
-                    className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted"
-                  />
-                  <label htmlFor="soc-search-input" className="sr-only">
-                    {t("socDashboard.searchHint")}
-                  </label>
-                  <input
-                    id="soc-search-input"
-                    type="search"
-                    value={searchQuery}
-                    onChange={event => setSearchQuery(event.target.value)}
-                    placeholder={t("socDashboard.search")}
-                    className="h-10 w-56 rounded-xl border border-border-default bg-terminal pl-9 pr-3 text-sm text-ink-primary placeholder:text-ink-muted transition-colors hover:border-border-strong focus-visible:border-bcc/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bcc/55"
-                  />
-                </div>
-              </div>
+      <Card heading={
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-baseline gap-3">
+              <h2 className={sectionTitle}>{t("socDashboard.journal")}</h2>
+              <span className="mono-data whitespace-nowrap text-ink-muted">
+                {formatCount(filteredEvents.length)} {t("socDashboard.of")} {formatCount(events.length)}
+              </span>
             </div>
-
-            {/* Фильтр по типам событий */}
-            <div role="group" aria-label={t("socDashboard.filterType")} className="flex flex-wrap items-center gap-1.5">
-              {[
-                ...typeFilterChips,
-                ...(countsByFilter.OTHER_ATTACK > 0 || typeFilter === "OTHER_ATTACK"
-                  ? [{ value: "OTHER_ATTACK" as const, label: t("common.other") }]
-                  : []),
-              ].map(chip => {
-                const count = countsByFilter[chip.value];
-                const active = typeFilter === chip.value;
-                return (
-                  <button
-                    key={chip.value}
-                    type="button"
-                    aria-pressed={active}
-                    onClick={() => setTypeFilter(chip.value)}
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                      active
-                        ? "border-bcc/55 bg-bcc/[.16] text-emerald-200"
-                        : "border-border-default bg-terminal text-ink-secondary hover:border-border-strong hover:text-ink-primary"
-                    }`}
-                  >
-                    <span>{chip.label}</span>
-                    <span className="font-mono tabular-nums text-ink-muted">{count}</span>
-                  </button>
-                );
-              })}
-
-              {hasActiveFilters && (
-                <Button size="sm" variant="ghost" onClick={resetFilters}>
-                  {t("socDashboard.reset")}
-                </Button>
-              )}
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <SegmentedControl label={t("socDashboard.severity")} options={severityOptions} value={severityFilter}
+                onChange={setSeverityFilter} className="max-w-full overflow-x-auto" />
+              <div className="relative min-w-0">
+                <Search aria-hidden="true" strokeWidth={1.75}
+                  className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted" />
+                <label htmlFor="soc-search-input" className="sr-only">{t("socDashboard.searchHint")}</label>
+                <input id="soc-search-input" type="search" value={searchQuery}
+                  onChange={event => setSearchQuery(event.target.value)} placeholder={t("socDashboard.search")}
+                  className="h-9 w-56 max-w-full rounded-lg border border-border-default bg-terminal pl-9 pr-3 text-sm text-ink-primary transition-colors placeholder:text-ink-muted hover:border-border-strong" />
+              </div>
             </div>
           </div>
-        }
-        divided
-      >
+
+          <div role="group" aria-label={t("socDashboard.filterType")}
+            className="flex items-center gap-1 overflow-x-auto border-b border-border-default p-1">
+            {[
+              ...typeFilterChips,
+              ...(countsByFilter.OTHER_ATTACK > 0 || typeFilter === "OTHER_ATTACK"
+                ? [{ value: "OTHER_ATTACK" as const, label: t("common.other") }] : []),
+            ].map(({ value, label }) => (
+              <button key={value} type="button" aria-pressed={typeFilter === value} onClick={() => setTypeFilter(value)}
+                className={`flex min-h-8 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-2 text-[0.8125rem] transition-colors hover:bg-surface-hover hover:text-ink-primary ${typeFilter === value ? "bg-elevated font-medium text-ink-primary shadow-highlight" : "text-ink-secondary"}`}>
+                {label}<span className="font-mono text-xs tabular-nums text-ink-muted">{formatCount(countsByFilter[value])}</span>
+              </button>
+            ))}
+            {hasActiveFilters && (
+              <Button size="sm" variant="ghost" className="shrink-0" onClick={resetFilters}>{t("socDashboard.reset")}</Button>
+            )}
+          </div>
+        </div>
+      }>
         {loading ? (
-          <div className="space-y-3 py-2">
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
+          <div className="space-y-2">
+            {Array.from({ length: 3 }, (_, index) => <Skeleton key={index} className="h-11 w-full" />)}
           </div>
         ) : events.length === 0 ? (
-          <EmptyState
-            icon={Radar}
-            title={t("socDashboard.empty")}
-            description={t("socDashboard.emptyHint")}
-            action={
-              <Link
-                href={`/?mode=${mode}&lang=${locale}`}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-bcc px-4 py-2 text-sm font-semibold text-ink-inverse shadow-glow-bcc transition hover:bg-bcc-hover"
-              >
-                {t("socDashboard.openDemo")}
-              </Link>
-            }
-          />
+          <EmptyState icon={Radar} title={t("socDashboard.empty")} description={t("socDashboard.emptyHint")}
+            action={<Link href={`/?mode=${mode}&lang=${locale}`}
+              className="inline-flex min-h-10 items-center rounded-lg border border-border-strong bg-elevated px-4 text-sm font-medium text-ink-primary transition-colors hover:bg-surface-hover">
+              {t("socDashboard.openDemo")}
+            </Link>} />
         ) : filteredEvents.length === 0 ? (
-          <EmptyState
-            icon={Filter}
-            title={t("socDashboard.noMatches")}
-            description={t("socDashboard.clearHint")}
-            action={
-              <Button size="sm" variant="secondary" onClick={resetFilters}>
-                {t("socDashboard.reset")}
-              </Button>
-            }
-          />
+          <EmptyState icon={Filter} title={t("socDashboard.noMatches")} description={t("socDashboard.clearHint")}
+            action={<Button size="sm" variant="secondary" onClick={resetFilters}>{t("socDashboard.reset")}</Button>} />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[780px] border-collapse text-left">
+            <table className={`w-full min-w-[840px] border-collapse text-left ${projectorMode ? "text-base" : "text-sm"}`}>
               <thead>
-                <tr className="border-b border-border-default text-xs font-semibold uppercase tracking-wider text-ink-muted">
-                  <th scope="col" className="py-2.5 pl-3 pr-3">{t("socDashboard.time")}</th>
-                  <th scope="col" className="px-3 py-2.5">{t("socDashboard.level")}</th>
-                  <th scope="col" className="px-3 py-2.5">{t("socDashboard.type")}</th>
-                  <th scope="col" className="px-3 py-2.5">{t("socDashboard.actor")}</th>
-                  <th scope="col" className="px-3 py-2.5 text-right">{t("common.amount")}</th>
-                  <th scope="col" className="px-3 py-2.5">{t("socDashboard.description")}</th>
-                  <th scope="col" className="py-2.5 pl-3 pr-3 text-right">{t("socDashboard.review")}</th>
+                <tr className="h-8 border-b border-border-default text-xs text-ink-muted [&>th]:px-3 [&>th]:font-normal">
+                  <th scope="col">{t("socDashboard.time")}</th>
+                  <th scope="col">{t("socDashboard.level")}</th>
+                  <th scope="col">{t("socDashboard.type")}</th>
+                  <th scope="col">{t("socDashboard.actor")}</th>
+                  <th scope="col" className="text-right">{t("common.amount")}</th>
+                  <th scope="col">{t("socDashboard.description")}</th>
+                  <th scope="col" className="text-right">{t("socDashboard.review")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-subtle">
                 {filteredEvents.map(item => {
                   const meta = getEventMeta(item, t);
                   const failureCode = extractFailureCode(item);
-                  const highlighted = highlightedIds.has(item.id);
-                  const highlightStyle = highlighted
-                    ? meta.isAttack
-                      ? "bg-danger/[.20]"
-                      : "bg-bcc/[.16]"
-                    : "hover:bg-surface-hover/70";
-
+                  const summary = eventSummary(item, locale);
+                  const selected = selectedEvent?.id === item.id;
                   return (
-                    <motion.tr
-                      key={item.id}
-                      initial={reduce ? false : highlighted ? { opacity: 0, y: -8 } : false}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-                      tabIndex={0}
-                      onClick={() => setSelectedEvent(item)}
+                    <tr key={item.id} tabIndex={0} aria-current={selected || undefined} onClick={() => inspectEvent(item)}
                       onKeyDown={event => {
-                        if (event.target !== event.currentTarget) return;
-                        if (event.key === "Enter" || event.key === " ") {
+                        if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
                           event.preventDefault();
-                          setSelectedEvent(item);
+                          inspectEvent(item);
                         }
                       }}
-                      className={`cursor-pointer transition-colors duration-500 focus-visible:bg-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-bcc/80 ${highlightStyle}`}
-                    >
-                      <td className={`whitespace-nowrap py-3 pl-3 pr-3 font-mono tabular-nums text-ink-secondary ${projectorMode ? "text-sm" : "text-[13px]"}`}>
-                        {formatEventTime(item.timestamp, locale)}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-3">
-                        <Badge status={item.severity} />
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-3">
-                        <Badge tone={meta.tone}>{meta.label}</Badge>
-                      </td>
-                      <td className={`px-3 py-3 font-medium text-ink-primary ${projectorMode ? "text-base" : "text-sm"}`}>
+                      className={`cursor-pointer transition-colors hover:bg-surface-hover focus-visible:bg-surface-hover focus-visible:outline-offset-[-2px] [&>td]:px-3 ${projectorMode ? "h-14" : "h-11"} ${selected ? "bg-elevated shadow-[inset_1px_0_var(--text-secondary)]" : highlightedIds.has(item.id) ? "bg-elevated" : ""}`}>
+                      <td className="whitespace-nowrap font-mono tabular-nums text-ink-secondary">{formatEventTime(item.timestamp, locale)}</td>
+                      <td className="whitespace-nowrap"><Badge status={item.severity} /></td>
+                      <td className="whitespace-nowrap text-ink-secondary">{meta.label}</td>
+                      <td className="whitespace-nowrap">
                         {item.actorName}
+                        {item.txId && <code className="fingerprint block text-xs text-ink-muted" title={item.txId}>{fingerprint(item.txId, 1)}</code>}
                       </td>
-                      <td className={`whitespace-nowrap px-3 py-3 text-right font-mono font-semibold tabular-nums text-ink-primary ${projectorMode ? "text-base" : "text-sm"}`}>
+                      <td className="whitespace-nowrap text-right font-mono tabular-nums">
                         {item.amountTenge !== undefined ? formatTenge(item.amountTenge) : "—"}
                       </td>
-                      <td className={`max-w-[320px] px-3 py-3 text-ink-secondary ${projectorMode ? "text-sm" : "text-[13px]"}`}>
-                        <div className="truncate font-medium text-ink-primary" title={eventSummary(item, locale)}>
-                          {eventSummary(item, locale)}
-                        </div>
-                        {failureCode && (
-                          <div className="mt-0.5 font-mono text-xs text-danger-text">{failureCode}</div>
-                        )}
+                      <td className="max-w-[320px]">
+                        <div className="truncate" title={summary}>{summary}</div>
+                        {failureCode && <div className="truncate font-mono text-xs text-ink-muted" title={failureCode}>{failureCode}</div>}
                       </td>
-                      <td className="whitespace-nowrap py-3 pl-3 pr-3 text-right">
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          icon={<Microscope className="size-3.5 text-bcc" />}
-                          onClick={event => {
-                            event.stopPropagation();
-                            setSelectedEvent(item);
-                          }}
-                        >
-                          {t("socDashboard.details")}
-                        </Button>
+                      <td className="text-right">
+                        <Button size="sm" variant="ghost" onClick={event => {
+                          event.stopPropagation();
+                          inspectEvent(item);
+                        }}>{t("socDashboard.details")}</Button>
                       </td>
-                    </motion.tr>
+                    </tr>
                   );
                 })}
               </tbody>
@@ -708,12 +496,12 @@ export function SocDashboard() {
         )}
       </Card>
 
-      {/* Панель деталей события / Crypto Inspector */}
-      <SocEventDetailDrawer
-        event={selectedEvent}
-        open={selectedEvent !== null}
-        onClose={() => setSelectedEvent(null)}
-      />
+      <SocEventDetailDrawer event={selectedEvent} open={drawerOpen} projectorMode={projectorMode}
+        onClose={() => setDrawerOpen(false)} />
     </div>
   );
+}
+
+function formatCount(value: number) {
+  return Math.round(value).toLocaleString("ru-KZ");
 }

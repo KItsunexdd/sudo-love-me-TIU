@@ -29,8 +29,8 @@ export function DeviceOnboarding({ userId, software, onClose }: { userId: string
     }
   }
   return <Modal open onClose={onClose} dismissible={!busy} title={t("common.enroll")} description={t("deviceOnboarding.choose")}
-    footer={<Button loading={busy} icon={<Fingerprint size={18} />} onClick={() => void register()}>{t("common.enroll")}</Button>}>
-    <div className="space-y-3">
+    footer={<Button loading={busy} icon={<Fingerprint />} onClick={() => void register()}>{t("common.enroll")}</Button>}>
+    <div className="space-y-4">
       <SegmentedControl label={t("deviceOnboarding.deviceKey")} value={choice} onChange={setChoice} options={[
         { value: "passkey", label: "Passkey", disabled: busy }, { value: "software", label: "Software Key", disabled: busy },
       ]} />

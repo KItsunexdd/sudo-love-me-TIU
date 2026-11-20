@@ -8,10 +8,10 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 const accents = {
-  success: "border-l-bcc",
-  warning: "border-l-gold",
-  danger: "border-l-danger",
-  info: "border-l-quantum",
+  success: "bg-bcc",
+  warning: "bg-gold",
+  danger: "bg-danger",
+  info: "bg-ink-muted",
 };
 
 type ToastCopy = { title: string; description?: string } | { titleKey: MessageKey; descriptionKey?: MessageKey };
@@ -45,19 +45,20 @@ function ToastItem({ item, dismiss }: { item: ToastMessage; dismiss: (id: number
   return (
     <motion.div layout={!reduce} initial={{ opacity: 0, y: reduce ? 0 : 10 }} animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0 }} transition={{ duration: reduce ? 0 : 0.18 }}
-      className={`pointer-events-auto flex justify-between gap-3 rounded-xl border border-l-4 border-border-strong bg-elevated p-3.5 shadow-card ${accents[resolvedTone]}`}>
-      <div role={resolvedTone === "danger" ? "alert" : "status"} className="min-w-0 space-y-1">
+      className="pointer-events-auto flex justify-between gap-3 rounded-xl border border-border-strong bg-elevated p-4 shadow-modal">
+      <span aria-hidden="true" className={`mt-2 size-1.5 shrink-0 rounded-full ${accents[resolvedTone]}`} />
+      <div role={resolvedTone === "danger" ? "alert" : "status"} className="min-w-0 flex-1 space-y-1">
         <p className="type-h3">{title}</p>
         {description && <p className="text-sm text-ink-secondary">{description}</p>}
         {link && ("href" in link ? (
-          <Link href={link.href} onClick={() => dismiss(id)} className="inline-block rounded text-sm font-semibold text-bcc underline">{link.label}</Link>
+          <Link href={link.href} onClick={() => dismiss(id)} className="inline-block rounded text-sm font-medium text-bcc underline-offset-4 hover:underline">{link.label}</Link>
         ) : (
-          <button type="button" className="rounded text-sm font-semibold text-bcc underline"
+          <button type="button" className="rounded text-sm font-medium text-bcc underline-offset-4 hover:underline"
             onClick={() => { dismiss(id); link.onClick(); }}>{link.label}</button>
         ))}
       </div>
       <button type="button" aria-label={t("toast.dismiss")} onClick={() => dismiss(id)}
-        className="self-start rounded p-1 text-ink-secondary hover:bg-surface-hover">
+        className="-mr-1 -mt-1 self-start rounded-md p-1 text-ink-muted transition-colors hover:bg-surface-hover hover:text-ink-primary">
         <X className="size-4" aria-hidden="true" />
       </button>
     </motion.div>

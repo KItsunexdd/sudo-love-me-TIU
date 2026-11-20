@@ -62,18 +62,18 @@ export function OriginCheck({ rpId, bankOrigin: configuredOrigin }: { rpId: stri
 
   return (
     <main className="mx-auto grid w-full max-w-3xl gap-4 px-4 py-6 sm:py-8">
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-danger/50 bg-danger/[.12] px-4 py-3 text-sm text-danger-text">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-danger/45 bg-danger/[.08] px-4 py-3 text-sm text-danger-text">
         <div className="flex flex-wrap items-center gap-2">
-          <Globe aria-hidden="true" size={16} className="shrink-0" />
-          <span className="font-semibold">{t("originCheck.domain")}</span>
-          <code className="break-all rounded bg-black/30 px-1.5 py-0.5 font-mono text-xs text-ink-primary">{origin || "…"}</code>
+          <Globe aria-hidden="true" size={16} strokeWidth={1.75} className="shrink-0" />
+          <span>{t("originCheck.domain")}</span>
+          <code className="break-all font-mono text-xs text-ink-primary">{origin || "…"}</code>
         </div>
         <LocaleSwitch />
         <a
           href={bankOrigin && `${bankOrigin.replace(/\/$/, "")}/?lang=${locale}`}
-          className="inline-flex min-h-9 items-center gap-1.5 rounded-[10px] border border-border-strong bg-elevated px-3 py-1.5 text-xs font-semibold text-ink-primary transition-colors hover:border-bcc/50 hover:bg-surface-hover"
+          className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-border-strong bg-elevated px-3 py-1 text-xs font-medium text-ink-primary shadow-highlight transition-colors hover:bg-surface-hover"
         >
-          <ArrowLeft aria-hidden="true" size={14} /> {t("originCheck.back")}
+          <ArrowLeft aria-hidden="true" size={14} strokeWidth={1.75} /> {t("originCheck.back")}
         </a>
       </div>
 
@@ -105,7 +105,7 @@ export function OriginCheck({ rpId, bankOrigin: configuredOrigin }: { rpId: stri
             {t("originCheck.official")}
           </p>
           <a
-            className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-[10px] bg-gold px-3.5 py-1.5 text-[13px] font-semibold text-ink-inverse shadow-glow-gold transition hover:bg-gold-hover"
+            className="inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-lg bg-gold px-3 py-1 text-[0.8125rem] font-medium text-ink-inverse shadow-highlight transition-colors hover:bg-gold-hover"
             href={otherUrl && `${otherUrl}?lang=${locale}`}
           >
             {t("originCheck.alternate")} <ExternalLink aria-hidden="true" size={14} />
@@ -113,7 +113,7 @@ export function OriginCheck({ rpId, bankOrigin: configuredOrigin }: { rpId: stri
         </Card>
       )}
 
-      <Card className="space-y-3">
+      <Card className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="type-h2">{outcome ? t("originCheck.explanation") : t("originCheck.lock")}</h2>
           {origin && (
@@ -123,26 +123,26 @@ export function OriginCheck({ rpId, bankOrigin: configuredOrigin }: { rpId: stri
           )}
         </div>
 
-        <dl className="grid gap-2 rounded-xl border border-border-default bg-terminal p-3.5 text-sm sm:grid-cols-2">
+        <dl className="grid gap-3 rounded-lg border border-border-default bg-terminal p-4 text-sm sm:grid-cols-2">
           <div>
             <dt className="text-xs text-ink-muted">{t("originCheck.rpId")}</dt>
-            <dd className="mono-data mt-0.5 text-bcc">{rpId}</dd>
+            <dd className="mono-data mt-1 text-ink-primary">{rpId}</dd>
           </div>
           <div>
             <dt className="text-xs text-ink-muted">{t("originCheck.origin")}</dt>
-            <dd className={`mono-data mt-0.5 break-all ${sameOrigin ? "text-amber-300" : "text-danger-text"}`}>{origin || "…"}</dd>
+            <dd className={`mono-data mt-1 break-all ${sameOrigin ? "text-gold-text" : "text-danger-text"}`}>{origin || "…"}</dd>
           </div>
         </dl>
 
         {outcome && (outcome.code === "BROWSER_RESULT" ? (
-          <p role="status" className="rounded-xl border border-border-default bg-elevated p-3 text-sm text-ink-primary">{t(outcome.message)}</p>
+          <p role="status" className="rounded-lg border border-border-default bg-elevated p-4 text-sm text-ink-primary">{t(outcome.message)}</p>
         ) : (
           <ErrorCard title={t("originCheck.heading")} error={{ failureCode: outcome.code, message: t(outcome.message) }} />
         ))}
 
         {outcome && (
           <p className="flex items-start gap-2.5 text-sm leading-relaxed text-ink-secondary">
-            <ShieldCheck aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-bcc" />
+            <ShieldCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-bcc" strokeWidth={1.75} />
             <span>
               {t("originCheck.domainCheck")} <code className="font-mono text-ink-primary">localhost</code> {t("originCheck.and")}{" "}
               <code className="font-mono text-ink-primary">127.0.0.1</code> {t("originCheck.distinct")}

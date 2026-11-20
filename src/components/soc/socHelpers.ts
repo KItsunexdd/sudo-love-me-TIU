@@ -35,19 +35,16 @@ const getAttackCategories = (t: Translate): readonly {
   key: SocAttackCategory;
   label: string;
   shortLabel: string;
-  color: string;
 }[] => ([
-  { key: "MITM_AMOUNT", label: t("socHelpers.amount"), shortLabel: t("common.mitmAmount"), color: "#EF4444" },
-  { key: "MITM_RECIPIENT", label: t("socHelpers.iban"), shortLabel: "MITM IBAN", color: "#F97316" },
-  { key: "REPLAY", label: t("socHelpers.replay"), shortLabel: "Replay", color: "#F59E0B" },
-  { key: "PHISHING_ORIGIN", label: t("socHelpers.phishing"), shortLabel: "Phishing / Origin", color: "#FB7185" },
-  { key: "SOCIAL_ENGINEERING", label: t("socHelpers.social"), shortLabel: t("common.social"), color: "#FBBF24" },
-  { key: "PQ_SIGNATURE", label: t("socHelpers.quantum"), shortLabel: t("socHelpers.pq"), color: "#38BDF8" },
+  { key: "MITM_AMOUNT", label: t("socHelpers.amount"), shortLabel: t("common.mitmAmount") },
+  { key: "MITM_RECIPIENT", label: t("socHelpers.iban"), shortLabel: "MITM IBAN" },
+  { key: "REPLAY", label: t("socHelpers.replay"), shortLabel: "Replay" },
+  { key: "PHISHING_ORIGIN", label: t("socHelpers.phishing"), shortLabel: "Phishing / Origin" },
+  { key: "SOCIAL_ENGINEERING", label: t("socHelpers.social"), shortLabel: t("common.social") },
+  { key: "PQ_SIGNATURE", label: t("socHelpers.quantum"), shortLabel: t("socHelpers.pq") },
 ]);
 
-/**
- * Классификация событий согласована с серверной функцией attackType() в src/lib/soc/service.ts.
- */
+// Match the categories used by the SOC report.
 export function classifyEventCategory(event: SecurityEvent): SocEventCategory {
   switch (event.eventType) {
     case "ATTACK_MITM_BLOCKED": {
@@ -110,22 +107,22 @@ export function getEventMeta(event: SecurityEvent, t: Translate = russian): Even
 export function buildAttackBreakdown(blockedByType: Record<string, number>, t: Translate = russian): AttackBreakdownItem[] {
   const categories = getAttackCategories(t);
   const otherCount = (blockedByType.MITM_PAYLOAD ?? 0) + (blockedByType.WEBAUTHN ?? 0);
-  const raw = categories.map(meta => ({
+  const items: Omit<AttackBreakdownItem, "color" | "sharePercent">[] = categories.map(meta => ({
     ...meta,
     count: blockedByType[meta.key] ?? 0,
   }));
-  const items: Array<{ key: SocAttackCategory | "OTHER_ATTACK"; label: string; shortLabel: string; color: string; count: number }> = [...raw];
   if (otherCount > 0) {
     items.push({
       key: "OTHER_ATTACK",
       label: t("socHelpers.other"),
       shortLabel: t("common.other"),
-      color: "#A78BFA",
       count: otherCount,
     });
   }
   const total = items.reduce((sum, item) => sum + item.count, 0);
-  return items.map(item => ({
+  const neutralSteps = ["var(--text-secondary)", "var(--text-muted)", "var(--text-disabled)"];
+  return items.sort((left, right) => right.count - left.count).map((item, index) => ({
+    color: neutralSteps[Math.min(index, neutralSteps.length - 1)],
     ...item,
     sharePercent: total > 0 ? Math.round((item.count / total) * 100) : 0,
   }));

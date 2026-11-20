@@ -1,253 +1,142 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { useT } from "@/components/shell/LocaleProvider";
-import { useId, useState } from "react";
 import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
 import { formatCompactTenge, type RoiMonthlyPoint } from "@/lib/roi/calc";
 
 interface RoiCumulativeChartProps {
   points: readonly RoiMonthlyPoint[];
 }
 
-const WIDTH = 680;
-const HEIGHT = 250;
-const PAD = { top: 20, right: 20, bottom: 34, left: 78 };
-const PLOT_W = WIDTH - PAD.left - PAD.right;
-const PLOT_H = HEIGHT - PAD.top - PAD.bottom;
+const series = [
+  { key: "fraudCumulative", label: "roiCumulativeChart.fraud", ink: "text-ink-muted", dashed: true },
+  { key: "smsCumulative", label: "roiCumulativeChart.sms", ink: "text-ink-secondary", dashed: false },
+  { key: "totalCumulative", label: "common.total", ink: "text-bcc", dashed: false },
+] as const;
+const legendSeries = [...series].reverse();
 
-function formatAxisTick(value: number): string {
-  if (value <= 0) return "0";
-  if (value >= 1_000_000_000) {
-    const billions = value / 1_000_000_000;
-    return `${billions.toLocaleString("ru-KZ", { maximumFractionDigits: 1 })} млрд`;
-  }
-  if (value >= 1_000_000) {
-    const millions = value / 1_000_000;
-    return `${millions.toLocaleString("ru-KZ", { maximumFractionDigits: 0 })} млн`;
-  }
-  return value.toLocaleString("ru-KZ", { maximumFractionDigits: 0 });
+function axisTicks(maximum: number) {
+  const targetStep = Math.max(1, maximum / 4);
+  const magnitude = 10 ** Math.floor(Math.log10(targetStep));
+  const step = ([1, 2, 2.5, 5, 10].find(factor => factor * magnitude >= targetStep) ?? 10) * magnitude;
+  const intervals = Math.max(1, Math.ceil(maximum / step));
+  return Array.from({ length: intervals + 1 }, (_, index) => index * step);
 }
 
 export function RoiCumulativeChart({ points }: RoiCumulativeChartProps) {
   const { t } = useT();
-  const uid = useId();
+  const plotRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(800);
   const [selectedIndex, setSelectedIndex] = useState(11);
-  const safeIndex = Math.min(Math.max(0, selectedIndex), Math.max(0, points.length - 1));
-  const activePoint = points[safeIndex];
+  const index = Math.min(selectedIndex, points.length - 1);
+  const activePoint = points[index];
 
-  const maxTotal = Math.max(1, ...points.map(p => p.totalCumulative));
-  const yMax = maxTotal * 1.08;
+  useEffect(() => {
+    const plot = plotRef.current;
+    if (!plot) return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry.contentRect.width > 0) setWidth(entry.contentRect.width);
+    });
+    observer.observe(plot);
+    return () => observer.disconnect();
+  }, []);
 
-  const xAt = (index: number) =>
-    points.length <= 1 ? PAD.left : PAD.left + (index / (points.length - 1)) * PLOT_W;
-  const yAt = (val: number) => PAD.top + PLOT_H - (Math.max(0, val) / yMax) * PLOT_H;
-
-  const smsCoords = points.map((p, i) => ({ x: xAt(i), y: yAt(p.smsCumulative) }));
-  const totalCoords = points.map((p, i) => ({ x: xAt(i), y: yAt(p.totalCumulative) }));
-
-  const linePath = (coords: { x: number; y: number }[]) =>
-    coords.map((pt, i) => `${i === 0 ? "M" : "L"}${pt.x.toFixed(1)},${pt.y.toFixed(1)}`).join(" ");
-
-  const areaPath = (coords: { x: number; y: number }[]) => {
-    if (!coords.length) return "";
-    const baseline = (PAD.top + PLOT_H).toFixed(1);
-    const firstX = coords[0].x.toFixed(1);
-    const lastX = coords[coords.length - 1].x.toFixed(1);
-    return `${linePath(coords)} L${lastX},${baseline} L${firstX},${baseline} Z`;
-  };
-
-  const gridTicks = [0, 0.25, 0.5, 0.75, 1].map(ratio => ({
-    value: yMax * ratio,
-    y: PAD.top + PLOT_H * (1 - ratio),
-  }));
-
-  const smsGradId = `${uid}-sms-grad`;
-  const totalGradId = `${uid}-total-grad`;
-  const stepWidth = PLOT_W / Math.max(1, points.length - 1);
+  const ticks = axisTicks(Math.max(0, ...points.map(point => point.totalCumulative)));
+  const tickLabels = ticks.map(formatCompactTenge);
+  const max = ticks[ticks.length - 1];
+  const height = width < 480 ? 244 : 320;
+  const bottom = height - 28;
+  const top = 8;
+  const left = 12 + 8 * Math.max(...tickLabels.map(label => label.length));
+  const right = width - 16;
+  const step = (right - left) / Math.max(1, points.length - 1);
+  const x = (i: number) => left + i * step;
+  const y = (value: number) => bottom - (value / max) * (bottom - top);
+  const labelInterval = Math.max(1, Math.ceil(36 / Math.max(1, step)));
 
   return (
     <Card
       heading={
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="type-h2">{t("roiCumulativeChart.heading")}</h2>
-            <p className="mt-0.5 text-xs text-ink-muted">
-              {t("roiCumulativeChart.selectMonth")}
-            </p>
-          </div>
-          {activePoint && (
-            <Badge tone="neutral" className="font-mono tabular-nums">
-              {activePoint.label}
-            </Badge>
-          )}
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <h2 className="type-h2">{t("roiCumulativeChart.heading")}</h2>
+          <span className="font-mono text-xs text-ink-muted">{t("roiCumulativeChart.linear")}</span>
         </div>
       }
-      divided
     >
-      {activePoint && (
-        <div className="mb-3 grid grid-cols-1 gap-2 rounded-xl border border-border-subtle bg-terminal px-3.5 py-2.5 sm:grid-cols-3">
-          <div>
-            <div className="flex items-center gap-1.5 text-xs text-ink-secondary">
-              <span aria-hidden="true" className="size-2 rounded-full bg-bcc" />
-              {t("roiCumulativeChart.sms")}
-            </div>
-            <div className="mono-data mt-0.5 font-bold text-bcc">
-              {formatCompactTenge(activePoint.smsCumulative)}
-            </div>
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5 text-xs text-ink-secondary">
-              <span aria-hidden="true" className="size-2 rounded-full bg-gold" />
-              {t("roiCumulativeChart.fraud")}
-            </div>
-            <div className="mono-data mt-0.5 font-bold text-amber-300">
-              {formatCompactTenge(activePoint.fraudCumulative)}
-            </div>
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5 text-xs text-ink-secondary">
-              <span aria-hidden="true" className="size-2 rounded-full bg-quantum" />
-              {t("common.total")}
-            </div>
-            <div className="mono-data mt-0.5 font-bold text-ink-primary">
-              {formatCompactTenge(activePoint.totalCumulative)}
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="w-full overflow-x-auto">
+      <div ref={plotRef}>
         <svg
-          viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+          viewBox={`0 0 ${width} ${height}`}
+          width="100%"
+          height={height}
           role="group"
           aria-label={t("roiCumulativeChart.chart")}
-          className="h-auto w-full min-w-[460px] select-none"
+          className="block w-full select-none font-mono text-xs tabular-nums"
         >
-          <defs>
-            <linearGradient id={totalGradId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#F59E0B" stopOpacity="0.24" />
-              <stop offset="100%" stopColor="#F59E0B" stopOpacity="0.02" />
-            </linearGradient>
-            <linearGradient id={smsGradId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#00D084" stopOpacity="0.34" />
-              <stop offset="100%" stopColor="#00D084" stopOpacity="0.04" />
-            </linearGradient>
-          </defs>
-
-          {gridTicks.map((tick, index) => (
-            <g key={index}>
-              <line
-                x1={PAD.left}
-                x2={WIDTH - PAD.right}
-                y1={tick.y}
-                y2={tick.y}
-                stroke="#152B24"
-                strokeDasharray={index === 0 ? undefined : "4 4"}
-                strokeWidth={1}
-              />
-              <text
-                x={PAD.left - 10}
-                y={tick.y + 4}
-                textAnchor="end"
-                fill="#7FA397"
-                fontSize={12}
-                fontFamily="var(--font-mono)"
-              >
-                {formatAxisTick(tick.value)}
+          {ticks.map((tick, i) => (
+            <g key={tick}>
+              <line x1={left} x2={right} y1={y(tick)} y2={y(tick)} className="stroke-border-default" />
+              <text x={left - 8} y={y(tick) + 4} textAnchor="end" className="fill-ink-muted">
+                {tickLabels[i]}
               </text>
             </g>
           ))}
 
-          {/* Совокупный эффект (OpEx + фрод) */}
-          <path d={areaPath(totalCoords)} fill={`url(#${totalGradId})`} />
-          <path
-            d={linePath(totalCoords)}
-            fill="none"
-            stroke="#F59E0B"
-            strokeWidth={2.5}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-
-          {/* Прямая экономия банка (OpEx на SMS) */}
-          <path d={areaPath(smsCoords)} fill={`url(#${smsGradId})`} />
-          <path
-            d={linePath(smsCoords)}
-            fill="none"
-            stroke="#00D084"
-            strokeWidth={2.5}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-
-          {/* Вертикальный индикатор активного месяца */}
-          {totalCoords[safeIndex] && smsCoords[safeIndex] && (
-            <g>
-              <line
-                x1={totalCoords[safeIndex].x}
-                x2={totalCoords[safeIndex].x}
-                y1={PAD.top}
-                y2={PAD.top + PLOT_H}
-                stroke="#2B5447"
-                strokeWidth={1.5}
-                strokeDasharray="3 3"
-              />
-              <circle
-                cx={totalCoords[safeIndex].x}
-                cy={totalCoords[safeIndex].y}
-                r={5.5}
-                fill="#07110E"
-                stroke="#F59E0B"
-                strokeWidth={2.5}
-              />
-              <circle
-                cx={smsCoords[safeIndex].x}
-                cy={smsCoords[safeIndex].y}
-                r={5.5}
-                fill="#07110E"
-                stroke="#00D084"
-                strokeWidth={2.5}
-              />
-            </g>
+          {activePoint && (
+            <line x1={x(index)} x2={x(index)} y1={top} y2={bottom} className="stroke-ink-disabled" />
           )}
 
-          {/* Подписи месяцев и интерактивные зоны */}
-          {points.map((point, index) => {
-            const cx = xAt(index);
-            const active = index === safeIndex;
-            const zoneX = index === 0 ? PAD.left : cx - stepWidth / 2;
-            const zoneW = index === 0 || index === points.length - 1 ? stepWidth / 2 : stepWidth;
+          {series.map(({ key, ink, dashed }) => (
+            <g key={key} className={ink}>
+              <polyline
+                points={points.map((point, i) => `${x(i)},${y(point[key])}`).join(" ")}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={key === "totalCumulative" ? 2.5 : 1.5}
+                strokeDasharray={dashed ? "4 4" : undefined}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+              {activePoint && (
+                <circle cx={x(index)} cy={y(activePoint[key])} r={3.5} className="fill-surface" stroke="currentColor" strokeWidth={2} />
+              )}
+            </g>
+          ))}
+
+          {points.map((point, i) => {
+            const last = i === points.length - 1;
+            const zoneStart = i === 0 ? left - 8 : x(i) - step / 2;
+            const zoneEnd = last ? right + 8 : x(i) + step / 2;
+            const showLabel = i === 0 || last || (i % labelInterval === 0 && right - x(i) >= 28);
             return (
               <g key={point.month}>
-                <text
-                  x={cx}
-                  y={HEIGHT - 10}
-                  textAnchor="middle"
-                  fill={active ? "#F0FDF8" : "#7FA397"}
-                  fontSize={12}
-                  fontWeight={active ? 700 : 500}
-                  fontFamily="var(--font-mono)"
-                >
-                  {point.shortLabel}
-                </text>
+                {showLabel && (
+                  <text x={x(i)} y={height - 8} textAnchor="middle" className={i === index ? "fill-ink-primary" : "fill-ink-muted"}>
+                    {point.shortLabel}
+                  </text>
+                )}
                 <rect
-                  x={zoneX}
-                  y={PAD.top}
-                  width={Math.max(16, zoneW)}
-                  height={PLOT_H + 28}
+                  x={zoneStart}
+                  y={top}
+                  width={zoneEnd - zoneStart}
+                  height={height - top - 2}
                   fill="transparent"
-                  className="cursor-pointer rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-bcc"
+                  className="cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-bcc"
                   role="button"
                   tabIndex={0}
-                  aria-label={t("roiCumulativeChart.point", { label: point.label, value: formatCompactTenge(point.smsCumulative), value2: formatCompactTenge(point.totalCumulative) })}
-                  onMouseEnter={() => setSelectedIndex(index)}
-                  onFocus={() => setSelectedIndex(index)}
-                  onClick={() => setSelectedIndex(index)}
+                  aria-pressed={i === index}
+                  aria-label={t("roiCumulativeChart.point", {
+                    label: point.label,
+                    value: formatCompactTenge(point.smsCumulative),
+                    value2: formatCompactTenge(point.totalCumulative),
+                  })}
+                  onMouseEnter={() => setSelectedIndex(i)}
+                  onFocus={() => setSelectedIndex(i)}
+                  onClick={() => setSelectedIndex(i)}
                   onKeyDown={event => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
-                      setSelectedIndex(index);
+                      setSelectedIndex(i);
                     }
                   }}
                 />
@@ -257,19 +146,25 @@ export function RoiCumulativeChart({ points }: RoiCumulativeChartProps) {
         </svg>
       </div>
 
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-ink-secondary">
-        <div className="flex flex-wrap items-center gap-4">
-          <span className="inline-flex items-center gap-1.5">
-            <span aria-hidden="true" className="h-0.5 w-4 rounded bg-bcc" />
-            {t("common.direct")}
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span aria-hidden="true" className="h-0.5 w-4 rounded bg-gold" />
-            {t("roiCumulativeChart.combined")}
-          </span>
+      {activePoint && (
+        <div className="mt-3 border-t border-border-default pt-3">
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <span className="mono-data text-ink-primary">{activePoint.label}</span>
+            <p className="type-micro text-ink-muted">{t("roiCumulativeChart.selectMonth")}</p>
+          </div>
+          <dl className="grid gap-x-4 gap-y-2 sm:grid-cols-3">
+            {legendSeries.map(({ key, label, ink, dashed }) => (
+              <div key={key} className="flex items-baseline justify-between gap-3 sm:block">
+                <dt className="type-micro flex items-center gap-2 text-ink-secondary">
+                  <span aria-hidden="true" className={`w-4 shrink-0 border-t-2 ${ink} ${dashed ? "border-dashed" : ""} border-current`} />
+                  {t(label)}
+                </dt>
+                <dd className="mono-data text-ink-secondary sm:mt-1 sm:pl-6">{formatCompactTenge(activePoint[key])}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
-        <span className="font-mono text-ink-muted">{t("roiCumulativeChart.linear")}</span>
-      </div>
+      )}
     </Card>
   );
 }

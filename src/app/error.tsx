@@ -18,13 +18,13 @@ export default function AppError({ reset }: { reset: () => void }) {
             message: t("error.recovery"),
           }}
           action={
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              <Button size="sm" variant="primary" icon={<RotateCcw className="size-4" />} onClick={reset}>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" variant="primary" icon={<RotateCcw />} onClick={reset}>
                 {t("error.retry")}
               </Button>
               <Link
                 href="/"
-                className="inline-flex min-h-9 items-center justify-center rounded-[10px] border border-border-strong bg-elevated px-3 py-1.5 text-[13px] font-semibold text-ink-primary transition duration-150 hover:border-bcc/50 hover:bg-surface-hover"
+                className="inline-flex min-h-8 items-center justify-center rounded-lg border border-border-strong bg-elevated px-3 py-1 text-[0.8125rem] font-medium text-ink-primary shadow-highlight transition-colors hover:bg-surface-hover"
               >
                 {t("error.home")}
               </Link>
