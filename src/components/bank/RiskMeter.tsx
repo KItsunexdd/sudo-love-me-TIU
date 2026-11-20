@@ -40,9 +40,9 @@ export function RiskMeter({ score, level: assessedLevel, reasons = [], codes = [
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold leading-snug 2xl:type-h3">
+        <h2 className="text-sm font-semibold leading-snug 2xl:type-h3">
           {t("common.score")} <span className="text-ink-muted">(Anti-Scam)</span>
-        </h3>
+        </h2>
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-base font-bold tabular-nums 2xl:text-lg">{value} / 100</span>
           <Badge status={level} />

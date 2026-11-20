@@ -78,6 +78,7 @@ export function AttackSimulatorPanel({ tx, error, device, sample, onResult, onSo
 
   return (
     <div className="space-y-2.5 2xl:space-y-3">
+      <h2 className="sr-only">{t("demoStand.hacker")}</h2>
       {armed && (
         <p role="status" className="rounded-xl border border-danger/55 bg-danger/[.12] px-3.5 py-2 text-[13px] font-medium text-danger-text">
           {t("attackSimulatorPanel.armed")}

@@ -71,6 +71,8 @@ export function CosignRequestCard({
   const { amountTenge, mode, purpose, recipientAccount, recipientName } = transaction.payload;
   const corporate = mode === "B2B";
   const unavailable = disabled || seconds === undefined || expired;
+  // The full /cosign page has no section heading above the card; the embedded tab does.
+  const Heading = compact ? "h3" : "h2";
 
   return (
     <motion.article
@@ -98,10 +100,10 @@ export function CosignRequestCard({
             </span>
             <ShieldAlert className="size-[18px] shrink-0" aria-hidden="true" />
             <div className="min-w-0">
-              <h3 className="text-sm font-bold leading-tight">
+              <Heading className="text-sm font-bold leading-tight">
                 {corporate ? t("cosignRequestCard.directorRequired") : t("cosignRequestCard.suspected")}
-              </h3>
-              <p className="mt-0.5 text-xs opacity-90">
+              </Heading>
+              <p className="mt-0.5 text-xs">
                 {corporate ? t("cosignDetails.corporate") : <>{t("common.risk")} <span className="font-mono font-bold tabular-nums">{transaction.riskScore}/100</span></>}
               </p>
             </div>

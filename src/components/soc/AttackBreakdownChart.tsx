@@ -63,7 +63,7 @@ export function AttackBreakdownChart({
       <div className="w-full overflow-x-auto">
         <svg
           viewBox={`0 0 ${SVG_WIDTH} ${svgHeight}`}
-          role="img"
+          role="group"
           aria-label={t("attackBreakdownChart.chart", { totalAttacks })}
           className="h-auto w-full min-w-[420px] select-none"
         >

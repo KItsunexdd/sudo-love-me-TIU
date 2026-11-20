@@ -120,7 +120,7 @@ export function RoiCumulativeChart({ points }: RoiCumulativeChartProps) {
       <div className="w-full overflow-x-auto">
         <svg
           viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-          role="img"
+          role="group"
           aria-label={t("roiCumulativeChart.chart")}
           className="h-auto w-full min-w-[460px] select-none"
         >

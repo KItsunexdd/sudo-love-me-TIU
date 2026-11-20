@@ -305,6 +305,7 @@ export function CosignFeed({ userId, mode, compact = false, hideConnectionBadge 
               {!feed.error && !outcome && (!latest?.failureCode || latest.failureCode === "ERR_TX_EXPIRED") && (
                 <EmptyState
                   icon={ShieldCheck}
+                  headingLevel={compact ? 3 : 2}
                   className={compact ? "p-4" : "p-5"}
                   title={corporate ? t("cosignFeed.noPayments") : t("common.allClear")}
                   description={corporate ? t("cosignDetails.corporate") : t("cosignFeed.confirmHint")}
